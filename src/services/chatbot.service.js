@@ -1,6 +1,6 @@
 const cacheService = require('./cache.service');
 const aiService = require('./ai.service');
-const { Movie, Showtime, Cinema, Room } = require('../models');
+const { Movie, Showtime, Cinema, Room, Voucher } = require('../models');
 const { Op } = require('sequelize');
 
 // ─────────────────────────────────────────────
@@ -113,12 +113,19 @@ const getUpcomingShowtimes = async (movieId, limit = 5) => {
  */
 const formatShowtimes = (movie, showtimes) => {
   if (!showtimes.length) return `Phim "${movie.title}" hiện chưa có suất chiếu.`;
+
+  const feUrl = process.env.FRONTEND_URL;
+
   const lines = showtimes.map(
-    (st) => `  🕐 ${formatDatetime(st.start_time)} — 🏛 ${st.room?.cinema?.cinema_name ?? 'N/A'}`
+    (st) => {
+      const time = formatDatetime(st.start_time);
+      const cinema = st.room?.cinema?.cinema_name ?? 'N/A';
+      return ` 🕐 ${time} — 🏛 ${cinema} ${feUrl}/booking/${st.id}`;
+    }
   );
+
   return `🎬 Suất chiếu "${movie.title}":\n${lines.join('\n')}`;
 };
-
 // ─────────────────────────────────────────────
 // INTENT HANDLERS
 // ─────────────────────────────────────────────
@@ -138,18 +145,67 @@ const handleNumberSelection = async (msg, userId) => {
   return formatShowtimes(movie, showtimes);
 };
 
+const handleVoucherInfo = async () => {
+  const activeVouchers = await Voucher.findAll({
+    where: { 
+      is_active: true,
+      end_date: { [Op.gt]: new Date() } // Chỉ lấy các mã chưa hết hạn
+    },
+    limit: 5,
+    order: [['end_date', 'ASC']]
+  });
+
+  if (!activeVouchers.length) return 'Hiện tại hệ thống chưa có mã giảm giá hoặc khuyến mãi nào đang diễn ra.';
+  
+  const list = activeVouchers.map((v, i) => {
+    // Định dạng giá trị giảm dựa trên loại giảm giá (PERCENTAGE hoặc FIXED)
+    const discountStr = v.discount_type === 'PERCENTAGE' 
+      ? `${v.discount_value}%` 
+      : `${v.discount_value.toLocaleString('vi-VN')}đ`;
+      
+      const titleStr = v.title ? ` - ${v.title}` : '';
+   return `  ${i + 1}. 🎟️ Mã [${v.code}]: Giảm ${discountStr}${titleStr} (HSD: ${formatDatetime(v.end_date)})`;
+  }).join('\n');
+  
+  return `🎁 Danh sách mã giảm giá đang áp dụng:\n${list}`;
+};
 /**
  * Xử lý: phim đang chiếu / phim hôm nay.
  */
+// 1. Phim đang chiếu
 const handleNowPlaying = async () => {
   const movies = await Movie.findAll({
+    where: {
+      releaseDate: { // Sửa ở đây
+        [Op.lte]: new Date() 
+      }
+    },
     limit: 8,
     attributes: ['title'],
-    order: [['createdAt', 'DESC']],
+    order: [['releaseDate', 'DESC']], // Sửa cả ở phần sắp xếp
   });
+
   if (!movies.length) return 'Hiện chưa có phim nào đang chiếu.';
   const list = movies.map((m, i) => `  ${i + 1}. ${m.title}`).join('\n');
   return `🎥 Phim đang chiếu:\n${list}`;
+};
+
+// 2. Phim sắp chiếu
+const handleUpcomingMovies = async () => {
+  const movies = await Movie.findAll({
+    where: {
+      releaseDate: { // Sửa ở đây
+        [Op.gt]: new Date() 
+      }
+    },
+    limit: 8,
+    attributes: ['title'],
+    order: [['releaseDate', 'ASC']], // Sửa cả ở phần sắp xếp
+  });
+
+  if (!movies.length) return 'Hiện chưa có thông tin phim sắp ra mắt.';
+  const list = movies.map((m, i) => `  ${i + 1}. ${m.title}`).join('\n');
+  return `🍿 Phim sắp chiếu trong thời gian tới:\n${list}`;
 };
 
 /**
@@ -226,7 +282,8 @@ const handleGreeting = () =>
   `  • Xem phim đang chiếu\n` +
   `  • Tra suất chiếu theo tên phim\n` +
   `  • Hướng dẫn đặt vé\n` +
-  `  • Xem danh sách rạp\n\n` +
+  `  • Xem danh sách rạp\n` +
+  `  • Tìm mã giảm giá / khuyến mãi\n\n` +
   `Bạn cần hỗ trợ gì không? 😊`;
 
 // ─────────────────────────────────────────────
@@ -257,9 +314,19 @@ const INTENTS = [
     handler: () => handleNowPlaying(),
   },
   {
+    name: 'upcoming',
+    keywords: ['phim sap chieu', 'phim moi', 'sap ra mat'],
+    handler: () => handleUpcomingMovies(),
+  },
+  {
     name: 'booking',
     keywords: ['dat ve', 'mua ve', 'cach dat', 'huong dan dat', 'thanh toan'],
     handler: () => handleBookingGuide(),
+  },
+  {
+    name: 'voucher',
+    keywords: ['ma giam gia', 'khuyen mai', 'voucher', 'uu dai', 'coupon'],
+    handler: () => handleVoucherInfo(),
   },
   {
     name: 'cinema',
@@ -343,7 +410,7 @@ exports.processChat = async (message, history, userId) => {
     }
 
     // 5. Cache có chọn lọc
-    const CACHEABLE_INTENTS = ['now_playing', 'showtime', 'cinema', 'booking'];
+    const CACHEABLE_INTENTS = ['now_playing', 'showtime', 'cinema', 'booking', 'voucher', 'upcoming'];
     if (matchedIntent && CACHEABLE_INTENTS.includes(matchedIntent.name)) {
       DBG('STEP 5: caching response for intent →', matchedIntent.name);
       await cacheService.set(cacheKey, response, 300);

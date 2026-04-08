@@ -1,5 +1,5 @@
 const { Voucher } = require('../models');
-const { Op } = require('sequelize');
+const { Op, Sequelize } = require('sequelize');
 
 // [ADMIN] Lấy danh sách Voucher
 exports.getAllVouchers = async () => {
@@ -19,6 +19,20 @@ exports.toggleVoucher = async (id) => {
   if (!voucher) throw new Error('VOUCHER_NOT_FOUND');
   await voucher.update({ is_active: !voucher.is_active });
   return voucher;
+};
+
+exports.getActiveVouchers = async () => {
+  const now = new Date();
+  
+  return await Voucher.findAll({ 
+    where: { 
+      is_active: true,
+      start_date: { [Op.lte]: now }, // start_date <= now
+      end_date: { [Op.gte]: now },   // end_date >= now
+      used_count: { [Op.lt]: Sequelize.col('usage_limit') } // used_count < usage_limit
+    },
+    order: [['discount_value', 'DESC']] // Sắp xếp ưu tiên mã giảm giá trị cao lên đầu
+  });
 };
 
 // [USER] Kiểm tra Voucher hợp lệ và tính tiền giảm

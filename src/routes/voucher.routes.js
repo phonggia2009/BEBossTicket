@@ -7,7 +7,7 @@ const { protect, restrictTo } = require('../middlewares/authMiddleware');
 // (Đặt trên cùng để tránh bị nhầm với các route có :id nếu có)
 // Endpoint: POST /api/vouchers/check
 router.post('/check', protect, voucherController.check);
-
+router.get('/active', protect, voucherController.getActive);
 // 2. Lấy danh sách tất cả mã giảm giá
 // Endpoint: GET /api/vouchers
 router.get('/', protect, restrictTo('ADMIN'), voucherController.getAll);

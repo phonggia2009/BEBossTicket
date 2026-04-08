@@ -12,7 +12,23 @@ const Voucher = sequelize.define('Voucher', {
   used_count: { type: DataTypes.INTEGER, defaultValue: 0 }, 
   start_date: { type: DataTypes.DATE, allowNull: false },
   end_date: { type: DataTypes.DATE, allowNull: false },
-  is_active: { type: DataTypes.BOOLEAN, defaultValue: true }
+  is_active: { type: DataTypes.BOOLEAN, defaultValue: true },
+  title: { 
+    type: DataTypes.STRING, 
+    allowNull: false 
+  },
+  description: { 
+    type: DataTypes.TEXT, 
+    allowNull: true 
+  },
+  image: { 
+    type: DataTypes.STRING, 
+    allowNull: true 
+  },
+  tag: { 
+    type: DataTypes.STRING, 
+    allowNull: true 
+  },
 }, {
   tableName: 'vouchers',
   timestamps: true

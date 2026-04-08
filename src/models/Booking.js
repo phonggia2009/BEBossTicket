@@ -32,8 +32,15 @@ total_price: { type: DataTypes.INTEGER, allowNull: false },  // giữ INTEGER
   discount_amount: {
     type: DataTypes.INTEGER,
     defaultValue: 0, // Mặc định là giảm 0 đồng
-  }
-}, {
+  },
+  points_used: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0, // Mặc định là không dùng điểm
+},
+points_earned: {
+  type: DataTypes.INTEGER,
+  defaultValue: 0 // Mặc định là không tích điểm
+},
   tableName: 'bookings',
   timestamps: false
 });

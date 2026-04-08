@@ -30,6 +30,10 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: true
   },
+  points: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0, 
+  },
   // 3. Token để phục vụ quên mật khẩu
   resetToken: {
     type: DataTypes.STRING,

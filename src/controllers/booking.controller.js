@@ -120,7 +120,8 @@ exports.createBooking = async (req, res) => {
       return sendResponse(res, 404, `Không tìm thấy sản phẩm mã: ${error.message.split('|')[1]}`);
     if (error.message.startsWith('OUT_OF_STOCK'))
       return sendResponse(res, 400, `Sản phẩm ${error.message.split('|')[1]} hiện đã hết hàng`);
-
+    if (error.message === 'NOT_ENOUGH_POINTS')
+      return sendResponse(res, 400, 'Bạn không có đủ điểm thưởng để áp dụng');
     return sendResponse(res, 500, 'Lỗi hệ thống khi đặt vé', { error: error.message });
   }
 };

@@ -136,19 +136,53 @@ exports.createBooking = async (userId, bookingData) => {
       // Trừ đi 1 lượt sử dụng của Voucher
       await voucher.increment('used_count', { by: 1, transaction: t });
     }
+   const user = await models.User.findByPk(userId, { transaction: t });
+    if (!user) throw new Error('USER_NOT_FOUND');
 
-    const finalTotalPrice = originalTotalPrice - discountAmount;
+    let pointsDiscount = 0;
+    let pointsUsedValue = 0;
+
+    // Nếu request có gửi lên số điểm muốn sử dụng
+    if (bookingData.use_points && bookingData.use_points > 0) {
+      if (user.points < bookingData.use_points) {
+        throw new Error('NOT_ENOUGH_POINTS');
+      }
+      
+      // 100 điểm = 1000 VNĐ => 1 điểm = 10 VNĐ
+      pointsDiscount = bookingData.use_points * 10;
+      pointsUsedValue = bookingData.use_points;
+
+      // Đảm bảo không giảm quá số tiền thực tế cần thanh toán (sau khi áp voucher)
+      const priceAfterVoucher = originalTotalPrice - discountAmount;
+      if (pointsDiscount > priceAfterVoucher) {
+        pointsDiscount = priceAfterVoucher;
+        pointsUsedValue = Math.ceil(pointsDiscount / 10);
+      }
+
+      // Trừ điểm của user ngay khi tạo đơn
+      await user.decrement('points', { by: pointsUsedValue, transaction: t });
+    }
+    // --------------------------------
+
+    // Tính tổng tiền thanh toán cuối cùng (Đã trừ voucher và điểm)
+    const finalTotalPrice = originalTotalPrice - discountAmount - pointsDiscount;
+
+    // Tính điểm nhận được: 1.000 VNĐ thực trả = 1 điểm
+    const pointsEarnedValue = Math.floor(finalTotalPrice / 1000);
 
     // 5. Create booking with expiration
     const newBooking = await Booking.create({
       user_id: userId,
       showtime_id,
-      total_price: finalTotalPrice, // GIÁ ĐÃ TRỪ VOUCHER
-      discount_amount: discountAmount, // LƯU VẾT SỐ TIỀN GIẢM
+      total_price: finalTotalPrice,
+      discount_amount: discountAmount + pointsDiscount, // Tổng giảm (voucher + điểm)
       voucher_id: appliedVoucherId,
+      points_used: pointsUsedValue,     // Ghi nhận điểm đã dùng
+      points_earned: pointsEarnedValue, // Ghi nhận điểm sẽ được cộng
       status: 'PENDING',
       expired_at: new Date(Date.now() + EXPIRE_MINUTES * 60 * 1000)
     }, { transaction: t });
+
 
     // 6. Insert tickets
     const ticketsWithBookingId = tickets.map(tk => ({
@@ -325,6 +359,12 @@ exports.cancelBooking = async (bookingId, cancelStatus = 'CANCELLED') => {
     // 5. Cập nhật trạng thái Booking (thành CANCELLED hoặc EXPIRED)
     await booking.update({ status: cancelStatus }, { transaction: t });
 
+    if (booking.points_used > 0) {
+      const user = await models.User.findByPk(booking.user_id, { transaction: t });
+      if (user) {
+        await user.increment('points', { by: booking.points_used, transaction: t });
+      }
+    }
     // 6. Giải phóng ghế (cập nhật Ticket thành CANCELLED)
     await Ticket.update(
       { status: 'CANCELLED' },
@@ -522,7 +562,17 @@ exports.forceCancelBooking = async (bookingId) => {
 
     // 2. Cập nhật trạng thái Booking
     await booking.update({ status: 'CANCELLED' }, { transaction: t });
-
+    const user = await models.User.findByPk(booking.user_id, { transaction: t });
+    if (user) {
+      // Nếu lúc đặt có dùng điểm -> Hoàn lại
+      if (booking.points_used > 0) {
+        await user.increment('points', { by: booking.points_used, transaction: t });
+      }
+      // Nếu đơn ĐÃ THANH TOÁN THÀNH CÔNG và ĐÃ CỘNG ĐIỂM -> Thu hồi điểm đã cộng
+      if (booking.status === 'SUCCESS' && booking.points_earned > 0) {
+        await user.decrement('points', { by: booking.points_earned, transaction: t });
+      }
+    }
     // 3. Giải phóng ghế (Ticket -> CANCELLED)
     await Ticket.update(
       { status: 'CANCELLED' },
@@ -553,6 +603,14 @@ exports.updateBookingStatus = async (bookingId, status) => {
   // Nếu chuyển từ các trạng thái khác sang CANCELLED thì nên dùng forceCancelBooking để nhả ghế
   if (status === 'CANCELLED' && booking.status !== 'CANCELLED') {
     return await exports.forceCancelBooking(bookingId);
+  }
+  if (status === 'SUCCESS' && booking.status !== 'SUCCESS') {
+    if (booking.points_earned > 0) {
+      const user = await models.User.findByPk(booking.user_id);
+      if (user) {
+        await user.increment('points', { by: booking.points_earned });
+      }
+    }
   }
 
   await booking.update({ status });

@@ -15,33 +15,37 @@ const Booking = sequelize.define('Booking', {
     type: DataTypes.INTEGER,
     allowNull: false
   },
-total_price: { type: DataTypes.INTEGER, allowNull: false },  // giữ INTEGER
+  total_price: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
   status: {
     type: DataTypes.ENUM('PENDING', 'SUCCESS', 'CANCELLED','USED'),
-    defaultValue: 'PENDING'   // PENDING: Đang chờ thanh toán
+    defaultValue: 'PENDING'
   },
-  // Dùng duy nhất booking_time, bỏ created_at trùng lặp
   booking_time: { 
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW
   },
   voucher_id: {
     type: DataTypes.INTEGER,
-    allowNull: true, // Cho phép null vì không phải ai cũng dùng mã
+    allowNull: true
   },
   discount_amount: {
     type: DataTypes.INTEGER,
-    defaultValue: 0, // Mặc định là giảm 0 đồng
+    defaultValue: 0
   },
   points_used: {
     type: DataTypes.INTEGER,
-    defaultValue: 0, // Mặc định là không dùng điểm
-},
-points_earned: {
-  type: DataTypes.INTEGER,
-  defaultValue: 0 // Mặc định là không tích điểm
-},
-  tableName: 'bookings',
+    defaultValue: 0
+  },
+  points_earned: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  }
+}, {
+  tableName: 'bookings',     // ✅ ĐÚNG CHỖ
+  freezeTableName: true,
   timestamps: false
 });
 

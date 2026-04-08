@@ -152,7 +152,7 @@ exports.vnpayReturn = async (req, res) => {
 
     if (responseCode === '00') {
       // Thanh toán thành công -> Cập nhật trạng thái PAID
-      await booking.update({ status: 'SUCCESS' });
+      await bookingService.markBookingAsPaid(bookingId, 'SUCCESS');
       return res.redirect(`${frontendUrl}/payment/result?status=success&bookingId=${bookingId}`);
     } else {
       await bookingService.cancelBooking(booking.booking_id, 'CANCELLED');
@@ -210,7 +210,7 @@ exports.vnpayIpn = async (req, res) => {
     // 5. Xử lý kết quả thanh toán
     if (responseCode === '00') {
       // Thanh toán thành công
-      await booking.update({ status: 'SUCCESS' });
+      await bookingService.markBookingAsPaid(bookingId, 'SUCCESS');
     } else {
       // Thanh toán thất bại hoặc bị hủy -> Gọi hàm xử lý hủy toàn diện
       // Hàm này xử lý đổi trạng thái Booking, hủy Ticket và cộng lại số lượng bắp nước.

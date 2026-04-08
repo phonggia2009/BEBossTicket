@@ -143,20 +143,20 @@ exports.createBooking = async (userId, bookingData) => {
     let pointsUsedValue = 0;
 
     // Nếu request có gửi lên số điểm muốn sử dụng
-    if (bookingData.use_points && bookingData.use_points > 0) {
-      if (user.points < bookingData.use_points) {
+    if (bookingData.points_used && bookingData.points_used > 0) {
+      if (user.points < bookingData.points_used) {
         throw new Error('NOT_ENOUGH_POINTS');
       }
       
       // 100 điểm = 1000 VNĐ => 1 điểm = 10 VNĐ
-      pointsDiscount = bookingData.use_points * 10;
-      pointsUsedValue = bookingData.use_points;
+      pointsDiscount = bookingData.points_used * 1;
+      pointsUsedValue = bookingData.points_used;
 
       // Đảm bảo không giảm quá số tiền thực tế cần thanh toán (sau khi áp voucher)
       const priceAfterVoucher = originalTotalPrice - discountAmount;
       if (pointsDiscount > priceAfterVoucher) {
         pointsDiscount = priceAfterVoucher;
-        pointsUsedValue = Math.ceil(pointsDiscount / 10);
+        pointsUsedValue = pointsDiscount;
       }
 
       // Trừ điểm của user ngay khi tạo đơn
@@ -168,8 +168,18 @@ exports.createBooking = async (userId, bookingData) => {
     const finalTotalPrice = originalTotalPrice - discountAmount - pointsDiscount;
 
     // Tính điểm nhận được: 1.000 VNĐ thực trả = 1 điểm
-    const pointsEarnedValue = Math.floor(finalTotalPrice / 1000);
-
+    let pointsEarnedValue = 0;
+    if (pointsUsedValue === 0) {
+      pointsEarnedValue = Math.floor(finalTotalPrice / 1000);
+    }
+    console.log('[POINT_DEBUG] Calculated:', {
+      userId,
+      originalTotalPrice,
+      discountAmount,
+      pointsDiscount,
+      finalTotalPrice,
+      pointsEarnedValue
+    });
     // 5. Create booking with expiration
     const newBooking = await Booking.create({
       user_id: userId,
@@ -183,6 +193,11 @@ exports.createBooking = async (userId, bookingData) => {
       expired_at: new Date(Date.now() + EXPIRE_MINUTES * 60 * 1000)
     }, { transaction: t });
 
+    console.log('[POINT_DEBUG] Booking created:', {
+    bookingId: newBooking.booking_id,
+    pointsUsed: pointsUsedValue,
+    pointsEarned: pointsEarnedValue
+  });
 
     // 6. Insert tickets
     const ticketsWithBookingId = tickets.map(tk => ({
@@ -204,11 +219,13 @@ exports.createBooking = async (userId, bookingData) => {
 
     await t.commit();
     return newBooking;
+    
 
   } catch (error) {
     await t.rollback();
     throw error;
   }
+  
 };
 
 // ─────────────────────────────────────────────
@@ -288,6 +305,40 @@ exports.getMyBookings = async (userId) => {
   });
 
   return bookings;
+};
+
+exports.markBookingAsPaid = async (bookingId) => {
+  const booking = await Booking.findByPk(bookingId);
+  if (!booking) throw new Error('BOOKING_NOT_FOUND');
+
+  if (booking.status !== 'PENDING') return booking;
+
+  const user = await models.User.findByPk(booking.user_id);
+  if (!user) throw new Error('USER_NOT_FOUND');
+
+  // 👉 LOG trước
+  console.log('[POINT_DEBUG] Before adding:', {
+    userId: user.id,
+    currentPoints: user.points,
+    add: booking.points_earned
+  });
+
+  // 👉 cộng điểm
+  if (booking.points_earned > 0) {
+    await user.increment('points', { by: booking.points_earned });
+  }
+
+  const updatedUser = await models.User.findByPk(booking.user_id);
+
+  console.log('[POINT_DEBUG] After adding:', {
+    userId: updatedUser.id,
+    newPoints: updatedUser.points
+  });
+
+  // 👉 update booking
+  await booking.update({ status: 'SUCCESS' });
+
+  return booking;
 };
 
 // ─────────────────────────────────────────────

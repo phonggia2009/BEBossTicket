@@ -3,7 +3,7 @@ const http = require('http');
 const app = require('./src/app'); 
 const sequelize = require('./src/config/database'); 
 const socketUtil = require('./src/utils/socket');
-
+const { startBookingCron } = require('./src/cron/bookingCron');
 require('./src/models');
 
 const startServer = async () => {
@@ -16,7 +16,7 @@ const startServer = async () => {
     // 👉 sync trước khi làm gì khác
     await sequelize.sync({ alter: true });
     console.log('📦 DB synced');
-
+    startBookingCron();   
     // 👉 chỉ start server sau khi DB OK
     const server = http.createServer(app);
     socketUtil.init(server);

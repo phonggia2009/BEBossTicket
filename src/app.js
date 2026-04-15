@@ -6,16 +6,24 @@ const cors = require('cors');
 // startBookingCron(); // Gọi hàm để bắt đầu cron job
 
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.FRONTEND_URL
+];
+
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: function (origin, callback) {
+    // cho phép request không có origin (Postman, mobile app)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
-
-app.use(express.json());
-
-app.get('/', (req, res) => {
-  res.send('Chào mừng bạn đến với Node.js Backend!');
-});
 
 // KHAI BÁO TẤT CẢ CÁC ROUTES Ở ĐÂY
 app.use('/api/auth', authRoutes);

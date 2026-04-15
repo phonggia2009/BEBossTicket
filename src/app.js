@@ -2,8 +2,8 @@ const express = require('express');
 const authRoutes = require('./routes/auth.routes');
 const app = express();
 const cors = require('cors');
-const { startBookingCron } = require('./cron/bookingCron');
-startBookingCron(); // Gọi hàm để bắt đầu cron job
+// const { startBookingCron } = require('./cron/bookingCron');
+// startBookingCron(); // Gọi hàm để bắt đầu cron job
 
 
 app.use(cors({

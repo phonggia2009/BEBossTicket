@@ -3,7 +3,7 @@ const http = require('http');
 const app = require('./src/app'); 
 const sequelize = require('./src/config/database'); 
 const socketUtil = require('./src/utils/socket');
-
+require('./src/models');
 const startServer = async () => {
   try {
     // 🔍 Log để kiểm tra ENV (rất quan trọng khi deploy)

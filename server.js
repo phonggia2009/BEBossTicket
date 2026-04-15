@@ -3,37 +3,32 @@ const http = require('http');
 const app = require('./src/app'); 
 const sequelize = require('./src/config/database'); 
 const socketUtil = require('./src/utils/socket');
+
 require('./src/models');
+
 const startServer = async () => {
   try {
-    // 🔍 Log để kiểm tra ENV (rất quan trọng khi deploy)
-    console.log("ENV:", process.env.NODE_ENV);
     console.log("DB URL:", process.env.DATABASE_URL ? "✔ Có" : "❌ Không có");
 
-    // 🔌 Test kết nối DB
     await sequelize.authenticate();
-    console.log('✅ Kết nối Database thành công!');
+    console.log('✅ DB connected');
 
-    // 🛠️ Tạo bảng nếu chưa có
-    await sequelize.sync({ alter: true }); 
-    console.log('📦 Đồng bộ database thành công!');
+    // 👉 sync trước khi làm gì khác
+    await sequelize.sync({ alter: true });
+    console.log('📦 DB synced');
 
-    // 🌐 Tạo server
+    // 👉 chỉ start server sau khi DB OK
     const server = http.createServer(app);
-
-    // 🔌 Socket
     socketUtil.init(server);
 
     const PORT = process.env.PORT || 5000;
 
     server.listen(PORT, () => {
-      console.log(`🚀 Server đang chạy tại: ${PORT}`);
+      console.log(`🚀 Server running at ${PORT}`);
     });
 
   } catch (error) {
-    console.error('❌ Không thể kết nối Database:', error);
-
-    // ❗ Thoát process để Render restart lại (quan trọng)
+    console.error('❌ DB Error:', error);
     process.exit(1);
   }
 };

@@ -5,15 +5,24 @@ const mailer = require('../utils/mailer');
 const { Op } = require('sequelize');
 
 exports.registerUser = async (userData) => {
-  // 1. Tạo verificationToken ngẫu nhiên
+  // 1. KIỂM TRA EMAIL TỒN TẠI HAY CHƯA (Thêm đoạn này)
+  const existingUser = await User.findOne({ where: { email: userData.email } });
+  if (existingUser) {
+    // Ném ra lỗi để Controller bắt được
+    const error = new Error('Email này đã được đăng ký!');
+    error.statusCode = 400; // Bad request
+    throw error;
+  }
+
+  // 2. Tạo verificationToken ngẫu nhiên
   const verificationToken = crypto.randomBytes(32).toString('hex');
 
-  // 2. Lưu user vào Database
+  // 3. Lưu user vào Database (Bây giờ đã an toàn)
   const newUser = await User.create({
     ...userData,
     verificationToken,
     isVerified: false
-  });
+  })
 
   // 3. Gửi email xác thực (Bọc trong try-catch riêng để tránh lỗi 500 nếu mail chậm)
   try {

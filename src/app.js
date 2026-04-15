@@ -4,7 +4,8 @@ const app = express();
 const cors = require('cors');
 // const { startBookingCron } = require('./cron/bookingCron');
 // startBookingCron(); // Gọi hàm để bắt đầu cron job
-
+app.use(express.json()); 
+app.use(express.urlencoded({ extended: true }));
 
 const allowedOrigins = [
   'http://localhost:5173',

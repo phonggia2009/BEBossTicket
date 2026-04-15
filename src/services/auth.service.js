@@ -7,9 +7,7 @@ const { Op } = require('sequelize');
 exports.registerUser = async (userData) => {
   // 1. Kiểm tra email đã tồn tại chưa
   const existingUser = await User.findOne({ where: { email: userData.email } });
-  
   if (existingUser) {
-    // ⚠️ QUAN TRỌNG: Ném ra đúng thông điệp mà Controller đang chờ để bắt
     throw new Error('EMAIL_EXISTS'); 
   }
 

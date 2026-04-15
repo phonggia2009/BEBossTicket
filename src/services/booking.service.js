@@ -1,7 +1,8 @@
 const models = require('../models');
-const { Booking, Ticket, BookingItem, Showtime, Seat, Product, ShowtimePrice,Movie,Voucher } = models;
+const { Booking, Ticket, BookingItem, Showtime, Seat, Product, ShowtimePrice, Movie, Voucher } = models;
 const sequelize = models.sequelize || Booking.sequelize;
 const { Op } = require('sequelize');
+const userService = require('./user.service'); // Import userService để log lịch sử điểm
 
 const EXPIRE_MINUTES = 15;
 
@@ -136,7 +137,8 @@ exports.createBooking = async (userId, bookingData) => {
       // Trừ đi 1 lượt sử dụng của Voucher
       await voucher.increment('used_count', { by: 1, transaction: t });
     }
-   const user = await models.User.findByPk(userId, { transaction: t });
+    
+    const user = await models.User.findByPk(userId, { transaction: t });
     if (!user) throw new Error('USER_NOT_FOUND');
 
     let pointsDiscount = 0;
@@ -148,7 +150,7 @@ exports.createBooking = async (userId, bookingData) => {
         throw new Error('NOT_ENOUGH_POINTS');
       }
       
-      // 100 điểm = 1000 VNĐ => 1 điểm = 10 VNĐ
+      // 100 điểm = 1000 VNĐ => 1 điểm = 10 VNĐ (tạm thời logic cũ là 1 điểm = 1 VNĐ)
       pointsDiscount = bookingData.points_used * 1;
       pointsUsedValue = bookingData.points_used;
 
@@ -161,6 +163,15 @@ exports.createBooking = async (userId, bookingData) => {
 
       // Trừ điểm của user ngay khi tạo đơn
       await user.decrement('points', { by: pointsUsedValue, transaction: t });
+      
+      // 👉 GHI LOG: Dùng điểm khi đặt vé
+      await userService.logPointChange(
+        userId, 
+        -pointsUsedValue, 
+        user.points - pointsUsedValue, 
+        `Sử dụng điểm cho đơn hàng đang chờ thanh toán`, 
+        t
+      );
     }
     // --------------------------------
 
@@ -172,14 +183,7 @@ exports.createBooking = async (userId, bookingData) => {
     if (pointsUsedValue === 0) {
       pointsEarnedValue = Math.floor(finalTotalPrice / 1000);
     }
-    console.log('[POINT_DEBUG] Calculated:', {
-      userId,
-      originalTotalPrice,
-      discountAmount,
-      pointsDiscount,
-      finalTotalPrice,
-      pointsEarnedValue
-    });
+
     // 5. Create booking with expiration
     const newBooking = await Booking.create({
       user_id: userId,
@@ -192,12 +196,6 @@ exports.createBooking = async (userId, bookingData) => {
       status: 'PENDING',
       expired_at: new Date(Date.now() + EXPIRE_MINUTES * 60 * 1000)
     }, { transaction: t });
-
-    console.log('[POINT_DEBUG] Booking created:', {
-    bookingId: newBooking.booking_id,
-    pointsUsed: pointsUsedValue,
-    pointsEarned: pointsEarnedValue
-  });
 
     // 6. Insert tickets
     const ticketsWithBookingId = tickets.map(tk => ({
@@ -219,13 +217,11 @@ exports.createBooking = async (userId, bookingData) => {
 
     await t.commit();
     return newBooking;
-    
 
   } catch (error) {
     await t.rollback();
     throw error;
   }
-  
 };
 
 // ─────────────────────────────────────────────
@@ -307,38 +303,56 @@ exports.getMyBookings = async (userId) => {
   return bookings;
 };
 
+// ─────────────────────────────────────────────
+// MARK BOOKING AS PAID
+// ─────────────────────────────────────────────
 exports.markBookingAsPaid = async (bookingId) => {
-  const booking = await Booking.findByPk(bookingId);
-  if (!booking) throw new Error('BOOKING_NOT_FOUND');
+  const t = await sequelize.transaction();
 
-  if (booking.status !== 'PENDING') return booking;
+  try {
+    const booking = await Booking.findByPk(bookingId, { transaction: t });
+    
+    if (!booking) {
+      await t.rollback();
+      throw new Error('BOOKING_NOT_FOUND');
+    }
 
-  const user = await models.User.findByPk(booking.user_id);
-  if (!user) throw new Error('USER_NOT_FOUND');
+    if (booking.status !== 'PENDING') {
+      await t.rollback();
+      return booking;
+    }
 
-  // 👉 LOG trước
-  console.log('[POINT_DEBUG] Before adding:', {
-    userId: user.id,
-    currentPoints: user.points,
-    add: booking.points_earned
-  });
+    const user = await models.User.findByPk(booking.user_id, { transaction: t });
+    if (!user) {
+      await t.rollback();
+      throw new Error('USER_NOT_FOUND');
+    }
 
-  // 👉 cộng điểm
-  if (booking.points_earned > 0) {
-    await user.increment('points', { by: booking.points_earned });
+    // 👉 Cộng điểm
+    if (booking.points_earned > 0) {
+      await user.increment('points', { by: booking.points_earned, transaction: t });
+      
+      // 👉 Ghi log điểm
+      await userService.logPointChange(
+        user.id, 
+        booking.points_earned, 
+        user.points + booking.points_earned, 
+        `Tích điểm từ đơn hàng thành công #${booking.booking_id}`,
+        t
+      );
+    }
+
+    // 👉 Cập nhật booking
+    await booking.update({ status: 'SUCCESS' }, { transaction: t });
+
+    await t.commit();
+    return booking;
+  } catch (error) {
+    if (t && !t.finished) {
+      await t.rollback();
+    }
+    throw error;
   }
-
-  const updatedUser = await models.User.findByPk(booking.user_id);
-
-  console.log('[POINT_DEBUG] After adding:', {
-    userId: updatedUser.id,
-    newPoints: updatedUser.points
-  });
-
-  // 👉 update booking
-  await booking.update({ status: 'SUCCESS' });
-
-  return booking;
 };
 
 // ─────────────────────────────────────────────
@@ -366,7 +380,7 @@ exports.cancelBooking = async (bookingId, cancelStatus = 'CANCELLED') => {
   const t = await sequelize.transaction();
 
   try {
-    // 1. Tìm đơn hàng và KHÓA dòng này lại (Không include để tránh lỗi Postgres Outer Join)
+    // 1. Tìm đơn hàng và KHÓA dòng này lại
     const booking = await Booking.findByPk(bookingId, {
       transaction: t,
       lock: t.LOCK.UPDATE 
@@ -414,8 +428,18 @@ exports.cancelBooking = async (bookingId, cancelStatus = 'CANCELLED') => {
       const user = await models.User.findByPk(booking.user_id, { transaction: t });
       if (user) {
         await user.increment('points', { by: booking.points_used, transaction: t });
+        
+        // 👉 GHI LOG: Hoàn điểm khi hủy đơn
+        await userService.logPointChange(
+          user.id, 
+          booking.points_used, 
+          user.points + booking.points_used, 
+          `Hoàn điểm từ đơn hàng bị hủy/hết hạn #${booking.booking_id}`,
+          t
+        );
       }
     }
+
     // 6. Giải phóng ghế (cập nhật Ticket thành CANCELLED)
     await Ticket.update(
       { status: 'CANCELLED' },
@@ -426,7 +450,9 @@ exports.cancelBooking = async (bookingId, cancelStatus = 'CANCELLED') => {
     return true;
 
   } catch (error) {
-    await t.rollback();
+    if (t && !t.finished) {
+      await t.rollback();
+    }
     console.error(`[Lỗi] Hủy booking ${bookingId} thất bại:`, error);
     throw error;
   }
@@ -453,7 +479,6 @@ exports.expireBookingsByShowtime = async () => {
     let shouldExpire = false;
 
     // ── Điều kiện 1: Quá 15p kể từ lúc tạo booking chưa thanh toán ──
-    
     const createdAt = new Date(b.booking_time).getTime();
     const expireAt15p = new Date(createdAt + EXPIRE_MINUTES * 60 * 1000);
     if (now > expireAt15p) {
@@ -493,7 +518,6 @@ exports.getAllBookings = async (page = 1, limit = 15, filters = {}) => {
   const offset = (page - 1) * limit;
   const whereClause = {};
 
-  // Lọc theo trạng thái, mã đơn hàng, hoặc khoảng thời gian nếu có
   if (filters.status) whereClause.status = filters.status;
   if (filters.booking_id) whereClause.booking_id = filters.booking_id;
 
@@ -611,19 +635,43 @@ exports.forceCancelBooking = async (bookingId) => {
       }
     }
 
+    // Lưu lại trạng thái cũ trước khi update
+    const oldStatus = booking.status;
+
     // 2. Cập nhật trạng thái Booking
     await booking.update({ status: 'CANCELLED' }, { transaction: t });
+    
     const user = await models.User.findByPk(booking.user_id, { transaction: t });
     if (user) {
-      // Nếu lúc đặt có dùng điểm -> Hoàn lại
+      // TRƯỜNG HỢP 1: Nếu lúc đặt có dùng điểm -> Hoàn lại điểm
       if (booking.points_used > 0) {
         await user.increment('points', { by: booking.points_used, transaction: t });
+        
+        // 👉 GHI LOG
+        await userService.logPointChange(
+          user.id,
+          booking.points_used,
+          user.points + booking.points_used,
+          `Admin hủy đơn: Hoàn lại điểm đã sử dụng từ đơn hàng #${booking.booking_id}`,
+          t
+        );
       }
-      // Nếu đơn ĐÃ THANH TOÁN THÀNH CÔNG và ĐÃ CỘNG ĐIỂM -> Thu hồi điểm đã cộng
-      if (booking.status === 'SUCCESS' && booking.points_earned > 0) {
+
+      // TRƯỜNG HỢP 2: Nếu đơn ĐÃ THANH TOÁN THÀNH CÔNG và ĐÃ CỘNG ĐIỂM -> Thu hồi điểm đã cộng
+      if (oldStatus === 'SUCCESS' && booking.points_earned > 0) {
         await user.decrement('points', { by: booking.points_earned, transaction: t });
+        
+        // 👉 GHI LOG
+        await userService.logPointChange(
+          user.id,
+          -booking.points_earned,
+          user.points - booking.points_earned,
+          `Admin hủy đơn: Thu hồi điểm thưởng đã cộng từ đơn hàng #${booking.booking_id}`,
+          t
+        );
       }
     }
+
     // 3. Giải phóng ghế (Ticket -> CANCELLED)
     await Ticket.update(
       { status: 'CANCELLED' },
@@ -633,11 +681,12 @@ exports.forceCancelBooking = async (bookingId) => {
     await t.commit();
     return booking;
   } catch (error) {
-    await t.rollback();
+    if (t && !t.finished) {
+      await t.rollback();
+    }
     throw error;
   }
 };
-
 // [ADMIN] CẬP NHẬT TRẠNG THÁI BOOKING (Trường hợp đặc biệt)
 exports.updateBookingStatus = async (bookingId, status) => {
   const validStatuses = ['PENDING', 'SUCCESS', 'CANCELLED']; 
@@ -645,31 +694,68 @@ exports.updateBookingStatus = async (bookingId, status) => {
     throw new Error('INVALID_STATUS');
   }
 
-  const booking = await Booking.findByPk(bookingId);
-  if (!booking) throw new Error('BOOKING_NOT_FOUND');
-  if (booking.status === 'CANCELLED' && status !== 'CANCELLED') {
-    throw new Error('CANNOT_RESTORE_CANCELLED_BOOKING');
-  }
+  // Bổ sung Transaction để đảm bảo tính toàn vẹn dữ liệu
+  const t = await sequelize.transaction();
 
-  // Nếu chuyển từ các trạng thái khác sang CANCELLED thì nên dùng forceCancelBooking để nhả ghế
-  if (status === 'CANCELLED' && booking.status !== 'CANCELLED') {
-    return await exports.forceCancelBooking(bookingId);
-  }
-  if (status === 'SUCCESS' && booking.status !== 'SUCCESS') {
-    if (booking.points_earned > 0) {
-      const user = await models.User.findByPk(booking.user_id);
-      if (user) {
-        await user.increment('points', { by: booking.points_earned });
+  try {
+    const booking = await Booking.findByPk(bookingId, { 
+      transaction: t,
+      lock: t.LOCK.UPDATE 
+    });
+
+    if (!booking) {
+      await t.rollback();
+      throw new Error('BOOKING_NOT_FOUND');
+    }
+
+    if (booking.status === 'CANCELLED' && status !== 'CANCELLED') {
+      await t.rollback();
+      throw new Error('CANNOT_RESTORE_CANCELLED_BOOKING');
+    }
+
+    if (status === 'CANCELLED' && booking.status !== 'CANCELLED') {
+      await t.rollback(); // Rollback transaction hiện tại vì forceCancelBooking đã tự quản lý transaction riêng
+      return await exports.forceCancelBooking(bookingId);
+    }
+    
+    // Xử lý logic khi Admin ép trạng thái sang SUCCESS
+    if (status === 'SUCCESS' && booking.status !== 'SUCCESS') {
+      if (booking.points_earned > 0) {
+        const user = await models.User.findByPk(booking.user_id, { transaction: t });
+        
+        if (user) {
+          // Cộng điểm cho user
+          await user.increment('points', { by: booking.points_earned, transaction: t });
+          
+          // 👉 FIX LỖ HỔNG: Ghi log biến động điểm ngay trong transaction
+          await userService.logPointChange(
+            user.id,
+            booking.points_earned,
+            user.points + booking.points_earned, // Tổng điểm mới
+            `Admin cập nhật thủ công: Tích điểm từ đơn hàng #${booking.booking_id}`,
+            t
+          );
+        }
       }
     }
-  }
 
-  await booking.update({ status });
-  return booking;
+    // Cập nhật trạng thái
+    await booking.update({ status }, { transaction: t });
+    
+    // Commit transaction nếu mọi thứ thành công
+    await t.commit();
+    return booking;
+
+  } catch (error) {
+    // Nếu có lỗi xảy ra thì rollback lại toàn bộ
+    if (t && !t.finished) {
+      await t.rollback();
+    }
+    throw error;
+  }
 };
 
 exports.checkInBooking = async (bookingId) => {
-  // Bổ sung include để lấy đầy đủ thông tin: User, Showtime, Movie, Room, Tickets, Products
   const booking = await Booking.findByPk(bookingId, {
     include: [
       {

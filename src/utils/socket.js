@@ -1,73 +1,75 @@
-// utils/socket.js
+// src/utils/socket.js
 const socketIo = require('socket.io');
 
 let io;
-// Lưu trữ ghế đang được giữ. Cấu trúc: 
-// { showtimeId: { seatId: userId, ... }, ... }
+// Lưu trữ ghế đang được giữ. Cấu trúc: { showtimeId: { seatId: userId, ... }, ... }
 const holdingSeats = {}; 
+
+// THÊM MỚI: Theo dõi xem mỗi socket đang giữ những ghế nào
+// Cấu trúc: { socketId: [{ showtimeId, seatId, userId }, ...] }
+const socketTracker = {}; 
 
 module.exports = {
   init: (httpServer) => {
     io = socketIo(httpServer, {
-      cors: {
-        origin: "*", // Thay bằng domain frontend của bạn trên production
-        methods: ["GET", "POST"]
-      }
+      cors: { origin: "*", methods: ["GET", "POST"] }
     });
 
     io.on('connection', (socket) => {
       console.log('Client connected:', socket.id);
+      socketTracker[socket.id] = [];
 
-      // 1. Tham gia vào phòng của 1 suất chiếu
       socket.on('joinShowtime', ({ showtimeId }) => {
         socket.join(`showtime_${showtimeId}`);
-        // Gửi ngay danh sách các ghế ĐANG BỊ GIỮ cho user vừa join
         socket.emit('currentHoldingSeats', holdingSeats[showtimeId] || {});
       });
 
-      // 2. Rời khỏi phòng
       socket.on('leaveShowtime', ({ showtimeId }) => {
         socket.leave(`showtime_${showtimeId}`);
       });
 
-      // 3. Khi user click chọn 1 ghế (Hold)
-      socket.on('holdSeat', ({ showtimeId, seatId, userId }) => {
-        if (!holdingSeats[showtimeId]) {
-          holdingSeats[showtimeId] = {};
-        }
+      // 👉 THAY ĐỔI 1: Lưu ghế bằng socket.id
+      socket.on('holdSeat', ({ showtimeId, seatId }) => {
+        if (!holdingSeats[showtimeId]) holdingSeats[showtimeId] = {};
 
-        // Nếu ghế chưa ai giữ, cho phép user này giữ
         if (!holdingSeats[showtimeId][seatId]) {
-          holdingSeats[showtimeId][seatId] = userId;
+          holdingSeats[showtimeId][seatId] = socket.id; // Dùng socket.id làm chủ sở hữu
+          socketTracker[socket.id].push({ showtimeId, seatId });
           
-          // Phát sự kiện cho TẤT CẢ mọi người trong room biết ghế này đang bị giữ
-          io.to(`showtime_${showtimeId}`).emit('seatHeld', { showtimeId, seatId, userId });
+          // Phát sự kiện kèm socketId
+          io.to(`showtime_${showtimeId}`).emit('seatHeld', { showtimeId, seatId, socketId: socket.id });
         }
       });
 
-      // 4. Khi user bỏ chọn ghế (Release)
-      socket.on('releaseSeat', ({ showtimeId, seatId, userId }) => {
-        if (holdingSeats[showtimeId] && holdingSeats[showtimeId][seatId] === userId) {
+      // 👉 THAY ĐỔI 2: Chỉ cho nhả ghế nếu đúng là cái Tab (socket.id) đã giữ nó
+      socket.on('releaseSeat', ({ showtimeId, seatId }) => {
+        if (holdingSeats[showtimeId] && holdingSeats[showtimeId][seatId] === socket.id) {
           delete holdingSeats[showtimeId][seatId];
           
-          // Phát sự kiện cho mọi người biết ghế đã được nhả
-          io.to(`showtime_${showtimeId}`).emit('seatReleased', { showtimeId, seatId, userId });
+          socketTracker[socket.id] = socketTracker[socket.id].filter(
+            (seat) => !(seat.showtimeId === showtimeId && seat.seatId === seatId)
+          );
+          
+          io.to(`showtime_${showtimeId}`).emit('seatReleased', { showtimeId, seatId, socketId: socket.id });
         }
       });
+
       socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
+        const seatsToRelease = socketTracker[socket.id];
+        if (seatsToRelease && seatsToRelease.length > 0) {
+          seatsToRelease.forEach(({ showtimeId, seatId }) => {
+            if (holdingSeats[showtimeId] && holdingSeats[showtimeId][seatId] === socket.id) {
+              delete holdingSeats[showtimeId][seatId]; 
+              io.to(`showtime_${showtimeId}`).emit('seatReleased', { showtimeId, seatId });
+            }
+          });
+        }
+        delete socketTracker[socket.id];
       });
     });
 
     return io;
   },
-
-  getIo: () => {
-    if (!io) {
-      throw new Error('Socket.io chưa được khởi tạo!');
-    }
-    return io;
-  },
-
+  getIo: () => { if (!io) throw new Error('Socket.io error'); return io; },
   getHoldingSeats: () => holdingSeats
 };

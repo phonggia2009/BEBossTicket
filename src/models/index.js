@@ -14,6 +14,8 @@ const Product = require('./Product');
 const User = require('./User');
 const Comment = require('./Comment'); 
 const Voucher = require('./Voucher');
+const PointHistory = require('./PointHistory'); // 👉 BƯỚC 1: IMPORT POINT HISTORY Ở ĐÂY
+
 
 // --- 1. Quan hệ Phim & Lịch chiếu ---
 Movie.hasMany(Showtime, { foreignKey: 'movie_id', as: 'showtimes' });
@@ -44,26 +46,22 @@ Genre.belongsToMany(Movie, {
 });
 
 // --- 6. Quan hệ Lịch chiếu & Bảng giá vé theo loại ghế ---
-// Đây là quan hệ quan trọng để lấy được seat_prices khi gọi API showtimes
 Showtime.hasMany(ShowtimePrice, { 
   as: 'seat_prices', 
   foreignKey: 'showtime_id',
-  onDelete: 'CASCADE' // Khi xóa suất chiếu, tự động xóa các giá vé liên quan
+  onDelete: 'CASCADE'
 });
 ShowtimePrice.belongsTo(Showtime, { foreignKey: 'showtime_id' });
 
 
-
 // -----------------------------------------
 // 1. Quan hệ giữa User và Booking
-// Một User có thể có nhiều Hóa đơn
 // -----------------------------------------
 User.hasMany(Booking, { foreignKey: 'user_id', as: 'bookings' });
 Booking.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 // -----------------------------------------
 // 2. Quan hệ giữa Showtime và Booking / Ticket
-// Một Lịch chiếu có thể có nhiều Hóa đơn và nhiều Vé
 // -----------------------------------------
 Showtime.hasMany(Booking, { foreignKey: 'showtime_id', as: 'bookings' });
 Booking.belongsTo(Showtime, { foreignKey: 'showtime_id', as: 'showtime' });
@@ -73,7 +71,6 @@ Ticket.belongsTo(Showtime, { foreignKey: 'showtime_id', as: 'showtime' });
 
 // -----------------------------------------
 // 3. Quan hệ nội bộ nhóm Booking (Hóa đơn)
-// Một Hóa đơn có nhiều Vé (Tickets) và nhiều Đồ ăn (BookingItems)
 // -----------------------------------------
 Booking.hasMany(Ticket, { foreignKey: 'booking_id', as: 'tickets' });
 Ticket.belongsTo(Booking, { foreignKey: 'booking_id', as: 'booking' });
@@ -83,28 +80,40 @@ BookingItem.belongsTo(Booking, { foreignKey: 'booking_id', as: 'booking' });
 
 // -----------------------------------------
 // 4. Quan hệ của Ticket với Seat
-// Một Vé chỉ thuộc về 1 Ghế cụ thể
 // -----------------------------------------
 Seat.hasMany(Ticket, { foreignKey: 'seat_id', as: 'tickets' });
 Ticket.belongsTo(Seat, { foreignKey: 'seat_id', as: 'seat' });
 
 // -----------------------------------------
 // 5. Quan hệ của BookingItem với Product
-// Một BookingItem trỏ đến 1 Product (Đồ ăn/nước uống)
 // -----------------------------------------
 Product.hasMany(BookingItem, { foreignKey: 'product_id', as: 'booking_items' });
 BookingItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 
-// 1 User có nhiều Comment
+// -----------------------------------------
+// 6. Quan hệ User và Comment
+// -----------------------------------------
 User.hasMany(Comment, { foreignKey: 'user_id', as: 'comments' });
 Comment.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
-// 1 Phim có nhiều Comment
+// -----------------------------------------
+// 7. Quan hệ Movie và Comment
+// -----------------------------------------
 Movie.hasMany(Comment, { foreignKey: 'movie_id', as: 'comments' });
 Comment.belongsTo(Movie, { foreignKey: 'movie_id', as: 'movie' });
 
+// -----------------------------------------
+// 8. Quan hệ Voucher và Booking
+// -----------------------------------------
 Voucher.hasMany(Booking, { foreignKey: 'voucher_id', as: 'bookings' });
 Booking.belongsTo(Voucher, { foreignKey: 'voucher_id', as: 'voucher' });
+
+// -----------------------------------------
+// 9. Quan hệ User và PointHistory (LỊCH SỬ ĐIỂM)
+// -----------------------------------------
+// 👉 BƯỚC 2: KHAI BÁO QUAN HỆ Ở ĐÂY
+User.hasMany(PointHistory, { foreignKey: 'user_id', as: 'point_histories' });
+PointHistory.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 // --- EXPORT ---
 module.exports = {
@@ -121,5 +130,6 @@ module.exports = {
   Ticket,
   User,
   Comment,
-  Voucher 
+  Voucher,
+  PointHistory // 👉 BƯỚC 3: EXPORT RA NGOÀI ĐỂ CÁC FILE KHÁC DÙNG ĐƯỢC
 };

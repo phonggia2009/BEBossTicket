@@ -61,7 +61,7 @@ exports.registerUser = async (userData) => {
       emailHtml
     );
     
-    console.log(`[Email] Đã gửi link xác thực chuyên nghiệp đến: ${newUser.email}`);
+    console.log(`[Email] Đã gửi link xác thực đến: ${newUser.email}`);
   } catch (mailError) {
     // Chỉ log lỗi mail ra console server, không trả lỗi về cho Client để đảm bảo User vẫn đăng ký được
     console.error("[Lỗi gửi mail]:", mailError.message);
@@ -78,9 +78,9 @@ exports.loginUser = async (email, password) => {
     throw new Error('INVALID_CREDENTIALS');
   }
 
-  // if (!user.isVerified) {
-  //   throw new Error('ACCOUNT_NOT_VERIFIED');
-  // }
+  if (!user.isVerified) {
+    throw new Error('ACCOUNT_NOT_VERIFIED');
+  }
 
   // 2. Kiểm tra mật khẩu
   const isMatch = await user.comparePassword(password);

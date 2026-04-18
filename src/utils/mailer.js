@@ -20,24 +20,23 @@
 // };
 const nodemailer = require('nodemailer');
 
-const sendEmail = async (options) => {
+
+exports.sendEmail = async (to, subject, html) => {
   const transporter = nodemailer.createTransport({
     service: 'Gmail',
-    secure: true, 
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      user: process.env.SMTP_USER, // Hãy chắc chắn biến môi trường trên Render của bạn tên là SMTP_USER
+      pass: process.env.SMTP_PASS, // Và SMTP_PASS
     },
   });
 
   const mailOptions = {
     from: '"BossTicket Support" <no-reply@bossticket.com>',
-    to: options.email,
-    subject: options.subject,
-    html: options.html,
+    to: to,           // Truyền tham số to vào đây
+    subject: subject, // Truyền tham số subject vào đây
+    html: html,       // Truyền tham số html vào đây
   };
 
-  await transporter.sendMail(mailOptions);
+  // Trả về kết quả gửi mail
+  return await transporter.sendMail(mailOptions);
 };
-
-module.exports = sendEmail;

@@ -34,15 +34,39 @@ exports.moderateComment = async (content) => {
 };
 
 exports.generateFallbackResponse = async (message, history, dbContext = "") => {
-  const model = genAI.getGenerativeModel({ 
-    model: "gemini-flash-latest",
-    systemInstruction: "Bạn là AI rạp phim. Trả lời <50 từ. KHÔNG bịa tên phim. Chỉ dựa vào dữ liệu DB được cung cấp. Nếu không có thông tin, báo 'Hiện chưa có phim này'."
-  });
-
-  // Nạp bối cảnh từ DB vào prompt ẩn để AI không bịa data
   const prompt = `Dữ liệu từ DB: [${dbContext}]. Khách hỏi: ${message}`;
-  
-  const chat = model.startChat({ history });
-  const result = await chat.sendMessage(prompt);
-  return result.response.text();
+
+  const tryModel = async (modelName) => {
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      systemInstruction:
+        "Bạn là AI rạp phim. Trả lời <50 từ. KHÔNG bịa tên phim. Chỉ dựa vào dữ liệu DB được cung cấp. Nếu không có thông tin, báo 'Hiện chưa có phim này'",
+    });
+
+    const chat = model.startChat({ history });
+    const result = await chat.sendMessage(prompt);
+    return result.response.text();
+  };
+
+  // 🔥 Retry + fallback
+  try {
+    return await tryModel("gemini-flash-latest");
+  } catch (err) {
+    console.log("⚠️ Flash lỗi:", err.status);
+
+    // 👉 Retry 1 lần
+    if (err.status === 503) {
+      try {
+        await new Promise(r => setTimeout(r, 1000));
+        return await tryModel("gemini-flash-latest");
+      } catch (err2) {
+        console.log("⚠️ Retry vẫn lỗi → fallback sang PRO");
+
+        // 👉 Fallback model
+        return await tryModel("gemini-1.5-pro");
+      }
+    }
+
+    throw err;
+  }
 };

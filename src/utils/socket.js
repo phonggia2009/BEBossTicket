@@ -12,9 +12,10 @@ const socketTracker = {};
 module.exports = {
   init: (httpServer) => {
     // 👉 SỬA LỖI TẠI ĐÂY: Đồng bộ CORS với Express
+    const frontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, "") : null;
     const allowedOrigins = [
       'http://localhost:5173',
-      process.env.FRONTEND_URL 
+      frontendUrl
     ].filter(Boolean); // Lọc bỏ giá trị undefined nếu chưa cài biến môi trường
 
     io = socketIo(httpServer, {

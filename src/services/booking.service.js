@@ -275,7 +275,7 @@ exports.getMyBookings = async (userId) => {
   // 4. Query lại danh sách vé mới nhất (sau khi đã dọn dẹp data) để trả về cho Frontend
   const bookings = await Booking.findAll({
     where: { user_id: userId },
-    order: [['created_at', 'DESC']],
+    order: [['booking_time', 'DESC']],
     include: [
       {
         model: Showtime,

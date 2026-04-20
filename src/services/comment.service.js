@@ -7,7 +7,7 @@ exports.checkCanComment = async (userId, movieId) => {
   const bookingCount = await Booking.count({
     where: { 
       user_id: userId,
-      status: { [Op.in]: ['SUCCESS', 'PAID'] } // Bắt buộc phải là đơn đã thanh toán thành công
+      status: { [Op.in]: ['SUCCESS', 'USED'] } // Bắt buộc phải là đơn đã thanh toán thành công
     },
     include: [{
       model: Showtime,

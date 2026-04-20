@@ -269,7 +269,7 @@ exports.getMyBookings = async (userId) => {
 
   // 3. Dùng hàm cancelBooking để xử lý hủy toàn diện (hoàn vé, hoàn sản phẩm)
   for (const b of expiredBookings) {
-    await exports.cancelBooking(b.booking_id, 'EXPIRED');
+    await exports.cancelBooking(b.booking_id, 'CANCELLED');
   }
 
   // 4. Query lại danh sách vé mới nhất (sau khi đã dọn dẹp data) để trả về cho Frontend
@@ -500,7 +500,7 @@ exports.expireBookingsByShowtime = async () => {
     }
 
     if (shouldExpire) {
-      await exports.cancelBooking(b.booking_id, 'EXPIRED');
+      await exports.cancelBooking(b.booking_id, 'CANCELLED');
       updatedCount++;
     }
   }

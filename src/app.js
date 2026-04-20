@@ -26,6 +26,29 @@ app.use(cors({
   credentials: true
 }));
 
+app.get("/", (req, res) => {
+  res.status(200).send("Server is running");
+});
+
+app.get("/ping", (req, res) => {
+  res.status(200).send("pong");
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    uptime: process.uptime(),
+    timestamp: new Date()
+  });
+});
+app.head("/", (req, res) => {
+  res.status(200).end();
+});
+
+app.head("/ping", (req, res) => {
+  res.status(200).end();
+});
+
 // KHAI BÁO TẤT CẢ CÁC ROUTES Ở ĐÂY
 app.use('/api/auth', authRoutes);
 app.use('/api/users', require('./routes/user.routes'));

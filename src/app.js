@@ -31,6 +31,7 @@ app.get("/", (req, res) => {
 });
 
 app.get("/ping", (req, res) => {
+    console.log("Ping received at:", new Date());
   res.status(200).send("pong");
 });
 

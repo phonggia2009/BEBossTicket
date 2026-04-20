@@ -19,14 +19,25 @@ module.exports = {
 
     io = socketIo(httpServer, {
       cors: { 
-        origin: allowedOrigins, // Chỉ cho phép các domain được chỉ định
-        methods: ["GET", "POST"],
-        credentials: true // Bắt buộc phải có để hoạt động với cookie/token trên web thực tế
+        origin: (origin, callback) => {
+            if (!origin) return callback(null, true);
+
+            if (allowedOrigins.includes(origin)) {
+              return callback(null, true);
+            }
+
+            console.log("CORS BLOCK:", origin);
+            return callback(new Error("Not allowed by CORS"));
+          },
+          methods: ["GET", "POST"],
+          credentials: true // Bắt buộc phải có để hoạt động với cookie/token trên web thực tế
       }
     });
 
     io.on('connection', (socket) => {
-      console.log('Client connected:', socket.id);
+      io.on('connection_error', (err) => {
+        console.log("❌ Socket connection error:", err.message);
+      });
       socketTracker[socket.id] = [];
 
       socket.on('joinShowtime', ({ showtimeId }) => {

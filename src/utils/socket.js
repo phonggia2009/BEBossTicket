@@ -10,7 +10,7 @@ const holdingSeats = {};
 const socketTracker = {}; 
 
 module.exports = {
-  init: (httpServer) => {s
+  init: (httpServer) => {
     const allowedOrigins = [
       'http://localhost:5173',
       process.env.FRONTEND_URL 

@@ -72,6 +72,9 @@ exports.login = async (req, res) => {
     if (error.message === 'INVALID_CREDENTIALS') {
       return sendResponse(res, 401, 'Email hoặc mật khẩu không chính xác!');
     }
+    if (error.message === 'ACCOUNT_NOT_VERIFIED') {
+      return sendResponse(res, 403, 'Tài khoản chưa được xác thực. Vui lòng kiểm tra email để xác thực tài khoản!');
+    }
     return sendResponse(res, 500, 'Lỗi hệ thống khi đăng nhập!', { error: error.message });
   }
 };

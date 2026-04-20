@@ -108,8 +108,6 @@ exports.forgotPassword = async (email) => {
   await user.update({ resetToken, resetTokenExpires });
 
   const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-  
-  // Giao diện Email chuyên nghiệp hơn
   const emailHtml = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e1e1e1; border-radius: 10px;">
       <div style="text-align: center; margin-bottom: 20px;">

@@ -10,12 +10,10 @@ const holdingSeats = {};
 const socketTracker = {}; 
 
 module.exports = {
-  init: (httpServer) => {
-    // 👉 SỬA LỖI TẠI ĐÂY: Đồng bộ CORS với Express
-    const frontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, "") : null;
+  init: (httpServer) => {s
     const allowedOrigins = [
       'http://localhost:5173',
-      frontendUrl
+      process.env.FRONTEND_URL 
     ].filter(Boolean); // Lọc bỏ giá trị undefined nếu chưa cài biến môi trường
 
     io = socketIo(httpServer, {

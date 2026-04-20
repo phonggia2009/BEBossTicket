@@ -554,6 +554,75 @@ exports.getAllBookings = async (page = 1, limit = 15, filters = {}) => {
   };
 };
 
+exports.sendShowtimeReminders = async () => {
+  try {
+    const now = new Date();
+    // Lấy thời điểm 30 phút sau tính từ hiện tại
+    const thirtyMinutesLater = new Date(now.getTime() + 30 * 60000); 
+
+    // 1. Tìm các booking thỏa mãn điều kiện
+    const upcomingBookings = await Booking.findAll({
+      where: {
+        status: 'PAID', // Chỉ gửi cho vé đã thanh toán thành công (Tùy logic status của bạn)
+        isReminderSent: false // Chưa gửi mail
+      },
+      include: [
+        {
+          model: Showtime,
+          as: 'showtime', // Tên alias bạn định nghĩa trong associations
+          where: {
+             // Thời gian chiếu nằm trong khoảng (Bây giờ -> 30 phút nữa)
+             startTime: {
+               [Op.between]: [now, thirtyMinutesLater]
+             }
+          },
+          include: [{ model: Movie, as: 'movie' }] // Kéo theo tên phim để gửi mail
+        },
+        {
+          model: User,
+          as: 'user',
+          attributes: ['email', 'username', 'fullName'] // Cần email để gửi
+        }
+      ]
+    });
+
+    if (upcomingBookings.length === 0) return 0;
+
+    // 2. Gửi mail cho từng booking
+    let sentCount = 0;
+    for (const booking of upcomingBookings) {
+      if (booking.user && booking.user.email) {
+        const emailSubject = `⏰ Nhắc nhở: Phim ${booking.showtime.movie.title} sắp bắt đầu!`;
+        const emailHtml = `
+          <h2>Xin chào ${booking.user.fullName || booking.user.username},</h2>
+          <p>Suất chiếu phim <strong>${booking.showtime.movie.title}</strong> của bạn sẽ bắt đầu vào lúc <strong>${moment(booking.showtime.startTime).format('HH:mm DD/MM/YYYY')}</strong>.</p>
+          <p>Vui lòng đến rạp sớm 10-15 phút để lấy vé và mua bắp nước nhé!</p>
+          <p>Cảm ơn bạn đã sử dụng BossTicket!</p>
+        `;
+
+        try {
+          // Gọi hàm sendEmail từ utils/mailer.js
+          await mailer.sendEmail(booking.user.email, emailSubject, emailHtml);
+          
+          // Gửi xong thì update trạng thái
+          booking.isReminderSent = true;
+          await booking.save();
+          sentCount++;
+          
+        } catch (mailErr) {
+          console.error(`Lỗi gửi mail cho booking ${booking.id}:`, mailErr.message);
+          // Không văng lỗi (throw) ở đây để vòng lặp vẫn tiếp tục gửi cho người khác
+        }
+      }
+    }
+
+    return sentCount;
+  } catch (error) {
+    console.error('Lỗi ở sendShowtimeReminders service:', error);
+    throw error;
+  }
+};
+
 // ─────────────────────────────────────────────
 // [ADMIN] LẤY CHI TIẾT BOOKING (KHÔNG CHECK USER_ID)
 // ─────────────────────────────────────────────

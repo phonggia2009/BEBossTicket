@@ -42,7 +42,12 @@ const Booking = sequelize.define('Booking', {
   points_earned: {
     type: DataTypes.INTEGER,
     defaultValue: 0
-  }
+  },
+  isReminderSent: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'Đánh dấu đã gửi mail nhắc trước giờ chiếu hay chưa'
+    }
 }, {
   tableName: 'bookings',     // ✅ ĐÚNG CHỖ
   freezeTableName: true,

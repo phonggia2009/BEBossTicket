@@ -5,14 +5,24 @@ let io;
 // Lưu trữ ghế đang được giữ. Cấu trúc: { showtimeId: { seatId: userId, ... }, ... }
 const holdingSeats = {}; 
 
-// THÊM MỚI: Theo dõi xem mỗi socket đang giữ những ghế nào
+// Theo dõi xem mỗi socket đang giữ những ghế nào
 // Cấu trúc: { socketId: [{ showtimeId, seatId, userId }, ...] }
 const socketTracker = {}; 
 
 module.exports = {
   init: (httpServer) => {
+    // 👉 SỬA LỖI TẠI ĐÂY: Đồng bộ CORS với Express
+    const allowedOrigins = [
+      'http://localhost:5173',
+      process.env.FRONTEND_URL 
+    ].filter(Boolean); // Lọc bỏ giá trị undefined nếu chưa cài biến môi trường
+
     io = socketIo(httpServer, {
-      cors: { origin: "*", methods: ["GET", "POST"] }
+      cors: { 
+        origin: allowedOrigins, // Chỉ cho phép các domain được chỉ định
+        methods: ["GET", "POST"],
+        credentials: true // Bắt buộc phải có để hoạt động với cookie/token trên web thực tế
+      }
     });
 
     io.on('connection', (socket) => {
@@ -28,7 +38,7 @@ module.exports = {
         socket.leave(`showtime_${showtimeId}`);
       });
 
-      // 👉 THAY ĐỔI 1: Lưu ghế bằng socket.id
+      // Lưu ghế bằng socket.id
       socket.on('holdSeat', ({ showtimeId, seatId }) => {
         if (!holdingSeats[showtimeId]) holdingSeats[showtimeId] = {};
 
@@ -41,7 +51,7 @@ module.exports = {
         }
       });
 
-      // 👉 THAY ĐỔI 2: Chỉ cho nhả ghế nếu đúng là cái Tab (socket.id) đã giữ nó
+      // Chỉ cho nhả ghế nếu đúng là cái Tab (socket.id) đã giữ nó
       socket.on('releaseSeat', ({ showtimeId, seatId }) => {
         if (holdingSeats[showtimeId] && holdingSeats[showtimeId][seatId] === socket.id) {
           delete holdingSeats[showtimeId][seatId];

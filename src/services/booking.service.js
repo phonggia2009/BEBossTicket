@@ -597,51 +597,54 @@ exports.sendShowtimeReminders = async () => {
       if (booking.user && booking.user.email) {
         const displayName = booking.user.fullName ||'bạn';
         const emailSubject = `⏰ Nhắc nhở: Phim ${booking.showtime.movie.title} sắp bắt đầu!`;
+        const timeFormatted = moment(booking.showtime.start_time).utcOffset(7).format('HH:mm');
+        const dateFormatted = moment(booking.showtime.start_time).utcOffset(7).format('DD/MM/YYYY');
+
         const emailHtml = `
-        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #ffffff; padding: 20px 0;">
-          <tr>
-            <td align="center">
-              <table max-width="600" cellpadding="0" cellspacing="0" style="background-color: #141414; width: 100%; max-width: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #333333; margin: 0 auto;">
-                
-                <tr>
-                  <td style="background-color: #e50914; padding: 20px; text-align: center;">
-                    <h1 style="color: #ffffff; margin: 0; font-size: 26px; letter-spacing: 2px; text-transform: uppercase;">BOSSTICKET</h1>
-                  </td>
-                </tr>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #ffffff; padding: 20px 0;">
+            <tr>
+              <td align="center">
+                <table max-width="600" cellpadding="0" cellspacing="0" style="background-color: #141414; width: 100%; max-width: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #333333; margin: 0 auto;">
+                  
+                  <tr>
+                    <td style="background-color: #e50914; padding: 20px; text-align: center;">
+                      <h1 style="color: #ffffff; margin: 0; font-size: 26px; letter-spacing: 2px; text-transform: uppercase;">BOSSTICKET</h1>
+                    </td>
+                  </tr>
 
-                <tr>
-                  <td style="padding: 30px 25px;">
-                    <h2 style="color: #ffffff; margin-top: 0; font-size: 22px;">Xin chào ${displayName},</h2>
-                    
-                    <p style="color: #cccccc; font-size: 16px;">
-                      Suất chiếu phim <strong style="color: #e50914; font-size: 18px; text-transform: uppercase;">${booking.showtime.movie.title}</strong> của bạn sắp bắt đầu!
-                    </p>
-
-                    <div style="background-color: #1e1e1e; border-left: 5px solid #e50914; padding: 15px 20px; margin: 25px 0; border-radius: 0 4px 4px 0;">
-                      <p style="margin: 0; font-size: 14px; color: #aaaaaa; text-transform: uppercase;">⏰ Thời gian chiếu:</p>
-                      <p style="margin: 5px 0 0 0; font-size: 22px; font-weight: bold; color: #ffffff;">
-                        ${moment(booking.showtime.start_time).format('HH:mm')} <span style="font-size: 16px; font-weight: normal; color: #cccccc;">- ngày ${moment(booking.showtime.start_time).format('DD/MM/YYYY')}</span>
+                  <tr>
+                    <td style="padding: 30px 25px;">
+                      <h2 style="color: #ffffff; margin-top: 0; font-size: 22px;">Xin chào ${displayName},</h2>
+                      
+                      <p style="color: #cccccc; font-size: 16px;">
+                        Suất chiếu phim <strong style="color: #e50914; font-size: 18px; text-transform: uppercase;">${booking.showtime.movie.title}</strong> của bạn sắp bắt đầu!
                       </p>
-                    </div>
 
-                    <p style="color: #cccccc; font-size: 16px;">
-                      Vui lòng đến rạp sớm <strong>10-15 phút</strong> để thực hiện lấy vé và chuẩn bị bắp nước nhé! Chúc bạn có một trải nghiệm xem phim thật tuyệt vời.
-                    </p>
-                  </td>
-                </tr>
+                      <div style="background-color: #1e1e1e; border-left: 5px solid #e50914; padding: 15px 20px; margin: 25px 0; border-radius: 0 4px 4px 0;">
+                        <p style="margin: 0; font-size: 14px; color: #aaaaaa; text-transform: uppercase;">⏰ Thời gian chiếu:</p>
+                        <p style="margin: 5px 0 0 0; font-size: 22px; font-weight: bold; color: #ffffff;">
+                          ${timeFormatted} <span style="font-size: 16px; font-weight: normal; color: #cccccc;">- ngày ${dateFormatted}</span>
+                        </p>
+                      </div>
 
-                <tr>
-                  <td style="background-color: #000000; padding: 20px; text-align: center; border-top: 1px solid #222222;">
-                    <p style="color: #888888; font-size: 14px; margin: 0;">Cảm ơn bạn đã tin tưởng và đồng hành cùng <strong style="color: #ffffff;">BossTicket</strong>.</p>
-                    <p style="color: #555555; font-size: 12px; margin: 10px 0 0 0;">Đây là email tự động gửi từ hệ thống, vui lòng không trả lời lại email này.</p>
-                  </td>
-                </tr>
+                      <p style="color: #cccccc; font-size: 16px;">
+                        Vui lòng đến rạp sớm <strong>10-15 phút</strong> để thực hiện lấy vé và chuẩn bị bắp nước nhé! Chúc bạn có một trải nghiệm xem phim thật tuyệt vời.
+                      </p>
+                    </td>
+                  </tr>
 
-              </table>
-            </td>
-          </tr>
-        </table>
-      `;
+                  <tr>
+                    <td style="background-color: #000000; padding: 20px; text-align: center; border-top: 1px solid #222222;">
+                      <p style="color: #888888; font-size: 14px; margin: 0;">Cảm ơn bạn đã tin tưởng và đồng hành cùng <strong style="color: #ffffff;">BossTicket</strong>.</p>
+                      <p style="color: #555555; font-size: 12px; margin: 10px 0 0 0;">Đây là email tự động gửi từ hệ thống, vui lòng không trả lời lại email này.</p>
+                    </td>
+                  </tr>
+
+                </table>
+              </td>
+            </tr>
+          </table>
+        `;
 
         try {
           await mailer.sendEmail(booking.user.email, emailSubject, emailHtml);

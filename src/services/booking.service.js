@@ -583,8 +583,8 @@ exports.sendShowtimeReminders = async () => {
         },
         {
           model: models.User, // FIX LỖI: Gọi qua models.User
-          as: 'user',
-          attributes: ['email', 'username', 'fullName'] 
+          as: 'User',
+          attributes: ['email', 'fullName'] 
         }
       ]
     });
@@ -595,8 +595,7 @@ exports.sendShowtimeReminders = async () => {
     let sentCount = 0;
     for (const booking of upcomingBookings) {
       if (booking.user && booking.user.email) {
-        // Fallback tên hiển thị: Ưu tiên fullName, nếu không có thì lấy username, nếu không có nữa thì ghi 'bạn'
-        const displayName = booking.user.fullName || booking.user.username || 'bạn';
+        const displayName = booking.user.fullName ||'bạn';
         const emailSubject = `⏰ Nhắc nhở: Phim ${booking.showtime.movie.title} sắp bắt đầu!`;
         const emailHtml = `
           <h2>Xin chào ${displayName},</h2>

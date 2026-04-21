@@ -15,7 +15,6 @@ router.get('/suggested-videos', movieController.getSuggestedVideos);
 router.get('/', movieController.getMovieList);
 router.get('/search', movieController.searchMovies);
 router.get('/personalized-suggestions', protect, movieController.getPersonalizedSuggestions);
-// 🔴 QUAN TRỌNG: Các route cụ thể (như /trash) phải đặt TRƯỚC các route chứa param động (/:id)
 router.get('/trash', protect, restrictTo('ADMIN'), movieController.getTrash);
 
 // Cụm route có chứa :id đặt xuống dưới

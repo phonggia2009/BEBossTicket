@@ -563,7 +563,7 @@ exports.sendShowtimeReminders = async () => {
     // 1. Tìm các booking thỏa mãn điều kiện
     const upcomingBookings = await Booking.findAll({
       where: {
-        status: 'PAID', // Chỉ gửi cho vé đã thanh toán thành công (Tùy logic status của bạn)
+        status: 'SUCCESS', // Chỉ gửi cho vé đã thanh toán thành công (Tùy logic status của bạn)
         isReminderSent: false // Chưa gửi mail
       },
       include: [

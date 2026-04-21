@@ -66,6 +66,7 @@ app.use('/api/dashboard', require('./routes/dashboard.routes'));
 app.use('/api/comments', require('./routes/comment.routes'));
 app.use('/api/chatbot', require('./routes/chatbot.routes'));
 app.use('/api/vouchers', require('./routes/voucher.routes'));
+app.use('/api/settings', require('./routes/setting.routes'));
 
 // MIDDLEWARE BẮT LỖI
 app.use((err, req, res, next) => {

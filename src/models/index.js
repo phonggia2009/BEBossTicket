@@ -14,7 +14,8 @@ const Product = require('./Product');
 const User = require('./User');
 const Comment = require('./Comment'); 
 const Voucher = require('./Voucher');
-const PointHistory = require('./PointHistory'); // 👉 BƯỚC 1: IMPORT POINT HISTORY Ở ĐÂY
+const PointHistory = require('./PointHistory'); 
+const Setting = require('./Setting');
 
 
 // --- 1. Quan hệ Phim & Lịch chiếu ---
@@ -131,5 +132,6 @@ module.exports = {
   User,
   Comment,
   Voucher,
-  PointHistory // 👉 BƯỚC 3: EXPORT RA NGOÀI ĐỂ CÁC FILE KHÁC DÙNG ĐƯỢC
+  PointHistory,
+  Setting,
 };

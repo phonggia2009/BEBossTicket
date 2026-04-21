@@ -45,5 +45,21 @@ const restrictTo = (...roles) => {
     next();
   };
 };
+const attachUser = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer')) {
+      const token = authHeader.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findByPk(decoded.id, {
+        attributes: { exclude: ['password'] }
+      });
+      if (user) req.user = user;
+    }
+  } catch (_) {
+    // Token lỗi hoặc hết hạn → bỏ qua, không chặn request
+  }
+  next();
+};
 
-module.exports = { protect, restrictTo };
+module.exports = { protect, restrictTo, attachUser };

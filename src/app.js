@@ -1,3 +1,5 @@
+const { attachUser } = require('./middlewares/authMiddleware');
+const maintenanceMiddleware = require('./middlewares/maintenanceMiddleware');
 const express = require('express');
 const authRoutes = require('./routes/auth.routes');
 const app = express();
@@ -49,7 +51,8 @@ app.head("/", (req, res) => {
 app.head("/ping", (req, res) => {
   res.status(200).end();
 });
-
+app.use(attachUser);            // 1. Decode token trước
+app.use(maintenanceMiddleware); // 2. Kiểm tra bảo trì sau khi đã có req.user
 // KHAI BÁO TẤT CẢ CÁC ROUTES Ở ĐÂY
 app.use('/api/auth', authRoutes);
 app.use('/api/users', require('./routes/user.routes'));

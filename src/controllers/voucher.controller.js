@@ -11,16 +11,27 @@ exports.getAll = async (req, res) => {
 };
 
 exports.create = async (req, res) => {
+  let voucherData = {}; // ✅ đưa ra ngoài
+
   try {
-    let voucherData = { ...req.body };
+    voucherData = { ...req.body };
+
     if (req.files && req.files['image'] && req.files['image'].length > 0) {
       voucherData.image = req.files['image'][0].path; 
     }
 
+    if (!voucherData.code) {
+      return sendResponse(res, 400, 'Thiếu mã voucher (code)');
+    }
+
     const voucher = await voucherService.createVoucher(voucherData);
     return sendResponse(res, 201, 'Tạo mã thành công', voucher);
+
   } catch (error) {
-    if (error.message === 'VOUCHER_CODE_EXISTS') return sendResponse(res, 400, 'Mã này đã tồn tại');
+    if (error.message === 'VOUCHER_CODE_EXISTS') {
+      return sendResponse(res, 400, 'Mã này đã tồn tại');
+    }
+
     return sendResponse(res, 500, 'Lỗi hệ thống', { error: error.message });
   }
 };

@@ -583,7 +583,7 @@ exports.sendShowtimeReminders = async () => {
         },
         {
           model: models.User, // FIX LỖI: Gọi qua models.User
-          as: 'User',
+          as: 'user',
           attributes: ['email', 'fullName'] 
         }
       ]

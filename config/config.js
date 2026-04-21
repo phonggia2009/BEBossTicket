@@ -8,8 +8,9 @@ module.exports = {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
     dialect: 'postgres',
+    timezone: '+07:00', // Đã thêm: Giúp local của bạn đúng giờ Việt Nam
     dialectOptions: {
-      ssl: false // Nếu dùng Postgres local thì để false
+      ssl: false // Local không cần SSL
     }
   },
   test: {
@@ -18,11 +19,8 @@ module.exports = {
     database: process.env.DB_NAME,
     host: process.env.DB_HOST,
     dialect: 'postgres',
-     timezone: '+07:00', // Đặt múi giờ Việt Nam (+7)
-    dialectOptions: {
-      dateStrings: true,
-      typeCast: true,
-    },
+    timezone: '+07:00', // Múi giờ Việt Nam
+    // ĐÃ XÓA: dateStrings và typeCast vì Postgres không hỗ trợ
   },
   production: {
     username: process.env.DB_USER,
@@ -30,10 +28,13 @@ module.exports = {
     database: process.env.DB_NAME,
     host: process.env.DB_HOST,
     dialect: 'postgres',
-    timezone: '+07:00', // Đặt múi giờ Việt Nam (+7)
+    timezone: '+07:00', // Múi giờ Việt Nam
     dialectOptions: {
-      dateStrings: true,
-      typeCast: true,
-    },
+      // Quan trọng: Trên Render dùng Postgres thường yêu cầu SSL bắt buộc
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      }
+    }
   }
 };

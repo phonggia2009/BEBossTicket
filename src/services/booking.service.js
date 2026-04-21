@@ -1,11 +1,12 @@
 const models = require('../models');
-const { Booking, Ticket, BookingItem, Showtime, Seat, Product, ShowtimePrice, Movie, Voucher } = models;
+const { Booking, Ticket, BookingItem, Showtime, Seat, Product, ShowtimePrice, Movie, Voucher} = models;
 const sequelize = models.sequelize || Booking.sequelize;
 const { Op } = require('sequelize');
 const userService = require('./user.service'); // Import userService để log lịch sử điểm
 
 const EXPIRE_MINUTES = 15;
-
+const moment = require('moment');
+const mailer = require('../utils/mailer');
 // ─────────────────────────────────────────────
 // CREATE BOOKING
 // ─────────────────────────────────────────────
@@ -554,6 +555,9 @@ exports.getAllBookings = async (page = 1, limit = 15, filters = {}) => {
   };
 };
 
+// ─────────────────────────────────────────────
+// CRONJOB: GỬI MAIL NHẮC NHỞ SUẤT CHIẾU SẮP DIỄN RA
+// ─────────────────────────────────────────────
 exports.sendShowtimeReminders = async () => {
   try {
     const now = new Date();
@@ -563,25 +567,24 @@ exports.sendShowtimeReminders = async () => {
     // 1. Tìm các booking thỏa mãn điều kiện
     const upcomingBookings = await Booking.findAll({
       where: {
-        status: 'SUCCESS', // Chỉ gửi cho vé đã thanh toán thành công (Tùy logic status của bạn)
+        status: 'SUCCESS', // Chỉ gửi cho vé đã thanh toán thành công
         isReminderSent: false // Chưa gửi mail
       },
       include: [
         {
           model: Showtime,
-          as: 'showtime', // Tên alias bạn định nghĩa trong associations
+          as: 'showtime',
           where: {
-             // Thời gian chiếu nằm trong khoảng (Bây giờ -> 30 phút nữa)
-             startTime: {
+             start_time: {
                [Op.between]: [now, thirtyMinutesLater]
              }
           },
-          include: [{ model: Movie, as: 'movie' }] // Kéo theo tên phim để gửi mail
+          include: [{ model: Movie, as: 'movie' }] 
         },
         {
-          model: User,
+          model: models.User, // FIX LỖI: Gọi qua models.User
           as: 'user',
-          attributes: ['email', 'username', 'fullName'] // Cần email để gửi
+          attributes: ['email', 'username', 'fullName'] 
         }
       ]
     });
@@ -592,33 +595,31 @@ exports.sendShowtimeReminders = async () => {
     let sentCount = 0;
     for (const booking of upcomingBookings) {
       if (booking.user && booking.user.email) {
+        // Fallback tên hiển thị: Ưu tiên fullName, nếu không có thì lấy username, nếu không có nữa thì ghi 'bạn'
+        const displayName = booking.user.fullName || booking.user.username || 'bạn';
         const emailSubject = `⏰ Nhắc nhở: Phim ${booking.showtime.movie.title} sắp bắt đầu!`;
         const emailHtml = `
-          <h2>Xin chào ${booking.user.fullName || booking.user.username},</h2>
-          <p>Suất chiếu phim <strong>${booking.showtime.movie.title}</strong> của bạn sẽ bắt đầu vào lúc <strong>${moment(booking.showtime.startTime).format('HH:mm DD/MM/YYYY')}</strong>.</p>
+          <h2>Xin chào ${displayName},</h2>
+          <p>Suất chiếu phim <strong>${booking.showtime.movie.title}</strong> của bạn sẽ bắt đầu vào lúc <strong>${moment(booking.showtime.start_time).format('HH:mm DD/MM/YYYY')}</strong>.</p>
           <p>Vui lòng đến rạp sớm 10-15 phút để lấy vé và mua bắp nước nhé!</p>
           <p>Cảm ơn bạn đã sử dụng BossTicket!</p>
         `;
 
         try {
-          // Gọi hàm sendEmail từ utils/mailer.js
           await mailer.sendEmail(booking.user.email, emailSubject, emailHtml);
-          
-          // Gửi xong thì update trạng thái
           booking.isReminderSent = true;
           await booking.save();
           sentCount++;
           
         } catch (mailErr) {
-          console.error(`Lỗi gửi mail cho booking ${booking.id}:`, mailErr.message);
-          // Không văng lỗi (throw) ở đây để vòng lặp vẫn tiếp tục gửi cho người khác
+          console.error(`[Lỗi Mail] Không thể gửi cho booking #${booking.booking_id}:`, mailErr.message);
         }
       }
     }
 
     return sentCount;
   } catch (error) {
-    console.error('Lỗi ở sendShowtimeReminders service:', error);
+    console.error('[Lỗi Service] Hàm sendShowtimeReminders thất bại:', error);
     throw error;
   }
 };

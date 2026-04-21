@@ -18,7 +18,18 @@ const startBookingCron = () => {
     }
   });
 
-  console.log('[CRON] Booking expiry cron đã khởi động');
+  cron.schedule('*/5 * * * *', async () => {
+    console.log('[CRON] Kiểm tra gửi mail nhắc nhở suất chiếu...');
+    try {
+      const sentCount = await bookingService.sendShowtimeReminders();
+      if (sentCount > 0) {
+        console.log(`[CRON] Đã gửi ${sentCount} email nhắc nhở suất chiếu.`);
+      }
+    } catch (err) {
+      console.error('[CRON] Lỗi gửi mail nhắc nhở:', err.message);
+    }
+  });
+  console.log('[CRON] Hệ thống Cron Job đã khởi động');
 };
 
 module.exports = { startBookingCron };

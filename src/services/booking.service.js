@@ -495,7 +495,7 @@ exports.markBookingAsPaid = async (bookingId) => {
           bookingItems: bookingDetail.products,
           totalPrice:   bookingDetail.total_price,
           pointsEarned: bookingDetail.points_earned,
-          sqrCid: `cid:qr-${bookingDetail.booking_id}` 
+          qrCid: `cid:qr-${bookingDetail.booking_id}` 
         });
 
         await mailer.sendEmail(

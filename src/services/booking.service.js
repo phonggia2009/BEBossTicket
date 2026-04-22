@@ -265,7 +265,7 @@ exports.createBooking = async (userId, bookingData) => {
       await voucher.increment('used_count', { by: 1, transaction: t });
     }
     
-    const user = await models.User.findByPk(userId, { transaction: t });
+    const user = await models.User.findByPk(userId, { transaction: t, lock: t.LOCK.UPDATE });
     if (!user) throw new Error('USER_NOT_FOUND');
 
     let pointsDiscount = 0;
@@ -289,6 +289,7 @@ exports.createBooking = async (userId, bookingData) => {
       }
 
       // Trừ điểm của user ngay khi tạo đơn
+      const newPoints = currentPoints - pointsUsedValue;
       await user.decrement('points', { by: pointsUsedValue, transaction: t });
       
       // 👉 GHI LOG: Dùng điểm khi đặt vé
@@ -441,15 +442,23 @@ exports.markBookingAsPaid = async (bookingId) => {
     if (!booking) { await t.rollback(); throw new Error('BOOKING_NOT_FOUND'); }
     if (booking.status !== 'PENDING') { await t.rollback(); return booking; }
 
-    const user = await models.User.findByPk(booking.user_id, { transaction: t });
+    const user = await models.User.findByPk(booking.user_id, { 
+      transaction: t,
+      lock: t.LOCK.UPDATE 
+    });
     if (!user) { await t.rollback(); throw new Error('USER_NOT_FOUND'); }
 
     if (booking.points_earned > 0) {
-      await user.increment('points', { by: booking.points_earned, transaction: t });
+      const currentPoints = user.points || 0;
+      const newPoints = currentPoints + booking.points_earned;
+
+      await user.update({ points: newPoints }, { transaction: t });
+      
+      // 👉 GHI LOG: Truyền chính xác số điểm mới
       await userService.logPointChange(
         user.id,
         booking.points_earned,
-        user.points + booking.points_earned,
+        newPoints,
         `Tích điểm từ đơn hàng thành công #${booking.booking_id}`,
         t
       );
@@ -591,18 +600,20 @@ exports.cancelBooking = async (bookingId, cancelStatus = 'CANCELLED') => {
     }
 
     // 5. Cập nhật trạng thái Booking (thành CANCELLED hoặc EXPIRED)
-    await booking.update({ status: cancelStatus }, { transaction: t });
+    await booking.update({ status: cancelStatus }, { transaction: t});
 
     if (booking.points_used > 0) {
-      const user = await models.User.findByPk(booking.user_id, { transaction: t });
+      const user = await models.User.findByPk(booking.user_id, { transaction: t,lock: t.LOCK.UPDATE  });
       if (user) {
-        await user.increment('points', { by: booking.points_used, transaction: t });
+        const currentPoints = user.points || 0;
+        const newPoints = currentPoints + booking.points_used;
+       await user.update({ points: newPoints }, { transaction: t });
         
         // 👉 GHI LOG: Hoàn điểm khi hủy đơn
         await userService.logPointChange(
           user.id, 
           booking.points_used, 
-          user.points + booking.points_used, 
+          newPoints,
           `Hoàn điểm từ đơn hàng bị hủy/hết hạn #${booking.booking_id}`,
           t
         );
@@ -924,7 +935,8 @@ exports.forceCancelBooking = async (bookingId) => {
     if (user) {
       // TRƯỜNG HỢP 1: Nếu lúc đặt có dùng điểm -> Hoàn lại điểm
       if (booking.points_used > 0) {
-        await user.increment('points', { by: booking.points_used, transaction: t });
+        currentPoints += booking.points_used; // Cộng dồn
+        await user.update({ points: currentPoints }, { transaction: t });
         
         // 👉 GHI LOG
         await userService.logPointChange(
@@ -938,7 +950,10 @@ exports.forceCancelBooking = async (bookingId) => {
 
       // TRƯỜNG HỢP 2: Nếu đơn ĐÃ THANH TOÁN THÀNH CÔNG và ĐÃ CỘNG ĐIỂM -> Thu hồi điểm đã cộng
       if (oldStatus === 'SUCCESS' && booking.points_earned > 0) {
-        await user.decrement('points', { by: booking.points_earned, transaction: t });
+        currentPoints -= booking.points_earned; // Trừ đi
+        if (currentPoints < 0) currentPoints = 0; 
+
+        await user.update({ points: currentPoints }, { transaction: t });
         
         // 👉 GHI LOG
         await userService.logPointChange(

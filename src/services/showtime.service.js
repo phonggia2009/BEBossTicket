@@ -295,7 +295,7 @@ exports.updateShowtime = async (id, data) => {
             isRoomChanged
           });
 
-          return mailer.sendMail(
+          return mailer.sendEmail(
             booking.user.email,
             `[BossTicket] Thay đổi lịch chiếu phim: ${movieTitle}`,
             mailContent

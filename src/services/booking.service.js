@@ -8,10 +8,22 @@ const EXPIRE_MINUTES = 15;
 const moment = require('moment');
 const mailer = require('../utils/mailer');
 
+const QRCode = require('qrcode');
+// booking_service.js — generateQRBase64
+const generateQRBase64 = async (bookingId) => {
+  const base64 = await QRCode.toDataURL(bookingId.toString(), // ✅ đồng bộ với frontend
+    {
+      width: 200,
+      margin: 2,
+      color: { dark: '#000000', light: '#ffffff' }
+    }
+  );
+  return base64;
+};
 // ─────────────────────────────────────────────
 // HELPER: Build email xác nhận đặt vé thành công
 // ─────────────────────────────────────────────
-const buildBookingSuccessEmail = ({ userName, bookingId, movieTitle, showtime, tickets, bookingItems, totalPrice, pointsEarned }) => {
+const buildBookingSuccessEmail = ({ userName, bookingId, movieTitle, showtime, tickets, bookingItems, totalPrice, pointsEarned,qrBase64 }) => {
 
   const timeFormatted = moment(showtime.start_time).utcOffset(7).format('HH:mm');
   const dateFormatted = moment(showtime.start_time).utcOffset(7).format('DD/MM/YYYY');
@@ -29,7 +41,21 @@ const buildBookingSuccessEmail = ({ userName, bookingId, movieTitle, showtime, t
   const pointsLine = pointsEarned > 0
     ? `<p style="color:#27ae60; margin:8px 0;">🎁 Bạn vừa tích được <b>+${pointsEarned} điểm</b> từ đơn hàng này.</p>`
     : '';
-
+  
+  const qrBlock = qrBase64 ? `
+    <div style="text-align:center; margin:24px 0;">
+      <p style="color:#fff; font-weight:bold; margin-bottom:12px;">📱 Mã QR check-in của bạn:</p>
+      <img
+        src="${qrBase64}"
+        alt="QR Code booking #${bookingId}"
+        width="180"
+        style="border:6px solid #fff; border-radius:8px; display:block; margin:0 auto;"
+      />
+      <p style="color:#888; font-size:12px; margin-top:8px;">
+        Xuất trình mã này tại quầy để nhận vé
+      </p>
+    </div>
+  ` : '';
   return `
     <table width="100%" cellpadding="0" cellspacing="0"
       style="background-color:#0a0a0a; font-family:'Helvetica Neue',Arial,sans-serif;
@@ -84,7 +110,7 @@ const buildBookingSuccessEmail = ({ userName, bookingId, movieTitle, showtime, t
                   </p>
                   ${pointsLine}
                 </div>
-
+                ${qrBlock}
                 <p style="color:#aaa; margin-top:24px; font-size:14px;">
                   Vui lòng đến rạp sớm <b>10–15 phút</b> và xuất trình mã đơn hàng
                   <b style="color:#fff;">#${bookingId}</b> tại quầy để nhận vé.
@@ -471,7 +497,8 @@ exports.markBookingAsPaid = async (bookingId) => {
           tickets:      bookingDetail.tickets,
           bookingItems: bookingDetail.products,
           totalPrice:   bookingDetail.total_price,
-          pointsEarned: bookingDetail.points_earned
+          pointsEarned: bookingDetail.points_earned,
+          qrBase64:     await generateQRBase64(bookingDetail.booking_id)
         });
 
         await mailer.sendEmail(

@@ -46,6 +46,56 @@ const findConflict = async (roomId, startTime, durationMinutes, excludeId = null
   return conflict || null;
 };
 
+const buildChangeNotificationEmail = ({
+  userName,
+  bookingId,
+  movieTitle,
+  oldTimeFormatted,
+  newTimeFormatted,
+  oldRoomName,
+  newRoomName,
+  isTimeChanged,
+  isRoomChanged
+}) => `
+  <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+    <div style="background-color: #e50914; padding: 20px; text-align: center; color: #fff;">
+      <h2 style="margin: 0; text-transform: uppercase;">Thông báo thay đổi lịch chiếu</h2>
+    </div>
+    <div style="padding: 20px;">
+      <p>Chào <b>${userName}</b>,</p>
+      <p>
+        Hệ thống BossTicket xin trân trọng thông báo suất chiếu phim <b>${movieTitle}</b>
+        mà bạn đã đặt vé (Mã đơn hàng: <b>${bookingId}</b>) vừa có sự thay đổi từ rạp chiếu:
+      </p>
+
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <thead>
+          <tr style="background-color: #f8f9fa;">
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Thông tin</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Lịch cũ</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Lịch mới cập nhật</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Thời gian chiếu</td>
+            <td style="padding: 12px; border: 1px solid #ddd; ${isTimeChanged ? 'text-decoration: line-through; color: #999;' : ''}">${oldTimeFormatted}</td>
+            <td style="padding: 12px; border: 1px solid #ddd; ${isTimeChanged ? 'color: #e50914; font-weight: bold;' : ''}">${newTimeFormatted}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Phòng chiếu</td>
+            <td style="padding: 12px; border: 1px solid #ddd; ${isRoomChanged ? 'text-decoration: line-through; color: #999;' : ''}">${oldRoomName}</td>
+            <td style="padding: 12px; border: 1px solid #ddd; ${isRoomChanged ? 'color: #e50914; font-weight: bold;' : ''}">${newRoomName}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>Rất mong quý khách thông cảm vì sự bất tiện này. Quý khách vui lòng kiểm tra lại thông tin vé trong mục "Của tôi" trên website.</p>
+      <p>Trân trọng,<br/><b>Đội ngũ BossTicket</b></p>
+    </div>
+  </div>
+`;
+
 // --- MAIN SERVICES ---
 
 exports.getShowtimes = async (page = 1, limit = 15, filters = {}) => {
@@ -156,8 +206,8 @@ exports.createShowtime = async (data) => {
 exports.updateShowtime = async (id, data) => {
   const { movie_id, room_id, start_time, seat_prices } = data;
   const startTimeUTC = moment.tz(start_time, 'Asia/Ho_Chi_Minh').utc().toDate();
-  
-  // 👉 BƯỚC 1: Lấy thông tin cũ trước khi cập nhật (có kèm Room và Movie để phục vụ gửi email)
+
+  // BƯỚC 1: Lấy thông tin cũ trước khi cập nhật
   const oldShowtime = await Showtime.findByPk(id, {
     include: [
       { model: Movie, as: 'movie' },
@@ -166,30 +216,36 @@ exports.updateShowtime = async (id, data) => {
   });
   if (!oldShowtime) throw new Error('SHOWTIME_NOT_FOUND');
 
-  // 👉 BƯỚC 2: Kiểm tra xem có sự thay đổi về Giờ chiếu hoặc Phòng chiếu không
-  const isTimeChanged = new Date(startTimeUTC).getTime() !== new Date(oldShowtime.start_time).getTime();
+  // BƯỚC 2: Snapshot thông tin cũ để dùng sau khi đã update
+  const oldStartTime = oldShowtime.start_time;
+  const oldRoomName = oldShowtime.room.room_name;
+  const movieTitle = oldShowtime.movie.title;
+
+  // BƯỚC 3: Phát hiện thay đổi
+  const isTimeChanged = new Date(startTimeUTC).getTime() !== new Date(oldStartTime).getTime();
   const isRoomChanged = Number(room_id) !== Number(oldShowtime.room_id);
 
+  // BƯỚC 4: Validate movie
   const movie = await Movie.findByPk(movie_id);
   if (!movie) throw new Error('MOVIE_NOT_FOUND');
 
   if (movie.releaseDate) {
     const releaseDate = moment.tz(movie.releaseDate, 'Asia/Ho_Chi_Minh').startOf('day');
     const showDate = moment.tz(start_time, 'Asia/Ho_Chi_Minh').startOf('day');
-    
-    if (showDate.isBefore(releaseDate)) {
-      throw new Error('INVALID_START_TIME');
-    }
+    if (showDate.isBefore(releaseDate)) throw new Error('INVALID_START_TIME');
   }
 
+  // BƯỚC 5: Transaction - chỉ chứa thao tác DB, không chứa logic email
   const t = await sequelize.transaction();
   try {
-    // Cập nhật thông tin suất chiếu
-    await oldShowtime.update({ movie_id, room_id, start_time: startTimeUTC }, { transaction: t });
+    await oldShowtime.update(
+      { movie_id, room_id, start_time: startTimeUTC },
+      { transaction: t }
+    );
 
-    if (seat_prices && Array.isArray(seat_prices)) {
+    if (seat_prices && Array.isArray(seat_prices) && seat_prices.length > 0) {
       await ShowtimePrice.destroy({ where: { showtime_id: id }, transaction: t });
-      
+
       const pricesData = seat_prices.map(item => ({
         showtime_id: id,
         seat_type: item.seat_type,
@@ -199,81 +255,67 @@ exports.updateShowtime = async (id, data) => {
     }
 
     await t.commit();
-    
-    // 👉 BƯỚC 3: Lấy thông tin mới nhất sau khi cập nhật
-    const updatedShowtime = await Showtime.findByPk(id, { include: showtimeInclude });
-
-    // 👉 BƯỚC 4: Logic gửi Email nếu có thay đổi
-    if (isTimeChanged || isRoomChanged) {
-      // Tìm các đơn hàng đã đặt cho suất chiếu này
-      const bookings = await Booking.findAll({
-        where: { 
-          showtime_id: id, 
-          status: { [Op.in]: ['SUCCESS', 'PENDING'] } // Có thể tuỳ chỉnh trạng thái
-        }, 
-        include: [{ model: User, as: 'user' }]
-      });
-
-      if (bookings.length > 0) {
-        bookings.forEach(booking => {
-          if (booking.user && booking.user.email) {
-            // Định dạng giờ hiển thị lên mail
-            const oldTimeFormatted = moment.tz(oldShowtime.start_time, 'Asia/Ho_Chi_Minh').format('HH:mm - DD/MM/YYYY');
-            const newTimeFormatted = moment.tz(updatedShowtime.start_time, 'Asia/Ho_Chi_Minh').format('HH:mm - DD/MM/YYYY');
-            
-            const mailContent = `
-              <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
-                <div style="background-color: #e50914; padding: 20px; text-align: center; color: #fff;">
-                  <h2 style="margin: 0; text-transform: uppercase;">Thông báo thay đổi lịch chiếu</h2>
-                </div>
-                <div style="padding: 20px;">
-                  <p>Chào <b>${booking.user.full_name || 'Quý khách'}</b>,</p>
-                  <p>Hệ thống BossTicket xin trân trọng thông báo suất chiếu phim <b>${oldShowtime.movie.title}</b> mà bạn đã đặt vé (Mã đơn hàng: <b>${booking.id}</b>) vừa có sự thay đổi từ rạp chiếu:</p>
-                  
-                  <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                    <thead>
-                      <tr style="background-color: #f8f9fa;">
-                        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Thông tin</th>
-                        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Lịch cũ</th>
-                        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Lịch mới cập nhật</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Thời gian chiếu</td>
-                        <td style="padding: 12px; border: 1px solid #ddd; ${isTimeChanged ? 'text-decoration: line-through; color: #999;' : ''}">${oldTimeFormatted}</td>
-                        <td style="padding: 12px; border: 1px solid #ddd; ${isTimeChanged ? 'color: #e50914; font-weight: bold;' : ''}">${newTimeFormatted}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Phòng chiếu</td>
-                        <td style="padding: 12px; border: 1px solid #ddd; ${isRoomChanged ? 'text-decoration: line-through; color: #999;' : ''}">${oldShowtime.room.room_name}</td>
-                        <td style="padding: 12px; border: 1px solid #ddd; ${isRoomChanged ? 'color: #e50914; font-weight: bold;' : ''}">${updatedShowtime.room.room_name}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  
-                  <p>Rất mong quý khách thông cảm vì sự bất tiện này. Quý khách vui lòng kiểm tra lại thông tin vé trong mục "Của tôi" trên website.</p>
-                  <p>Trân trọng,<br/><b>Đội ngũ BossTicket</b></p>
-                </div>
-              </div>
-            `;
-
-            // Gọi hàm gửi email
-            mailer.sendMail(
-              booking.user.email,
-              `[BossTicket] Thay đổi lịch chiếu phim: ${oldShowtime.movie.title}`,
-              mailContent
-            );
-          }
-        });
-      }
-    }
-
-    return updatedShowtime;
   } catch (error) {
     await t.rollback();
     throw error;
   }
+
+  // BƯỚC 6: Lấy thông tin mới sau khi commit (nằm ngoài try/catch của transaction)
+  const updatedShowtime = await Showtime.findByPk(id, { include: showtimeInclude });
+
+  // BƯỚC 7: Gửi email thông báo nếu có thay đổi giờ hoặc phòng chiếu
+  if (isTimeChanged || isRoomChanged) {
+    const bookings = await Booking.findAll({
+      where: {
+        showtime_id: id,
+        status: { [Op.in]: ['SUCCESS', 'PENDING'] }
+      },
+      include: [{ model: User, as: 'user' }]
+    });
+
+    if (bookings.length > 0) {
+      const oldTimeFormatted = moment.tz(oldStartTime, 'Asia/Ho_Chi_Minh').format('HH:mm - DD/MM/YYYY');
+      const newTimeFormatted = moment.tz(updatedShowtime.start_time, 'Asia/Ho_Chi_Minh').format('HH:mm - DD/MM/YYYY');
+      const newRoomName = updatedShowtime.room.room_name;
+
+      // FIX: Dùng Promise.all + await để đảm bảo tất cả email được gửi
+      // và lỗi không bị nuốt im lặng
+      const emailPromises = bookings
+        .filter(booking => booking.user?.email)
+        .map(booking => {
+          const mailContent = buildChangeNotificationEmail({
+            userName: booking.user.full_name || 'Quý khách',
+            bookingId: booking.id,
+            movieTitle,
+            oldTimeFormatted,
+            newTimeFormatted,
+            oldRoomName,
+            newRoomName,
+            isTimeChanged,
+            isRoomChanged
+          });
+
+          return mailer.sendMail(
+            booking.user.email,
+            `[BossTicket] Thay đổi lịch chiếu phim: ${movieTitle}`,
+            mailContent
+          );
+        });
+
+      // Dùng allSettled để một email lỗi không làm hỏng toàn bộ batch
+      const results = await Promise.allSettled(emailPromises);
+
+      const failedCount = results.filter(r => r.status === 'rejected').length;
+      if (failedCount > 0) {
+        console.error(`[updateShowtime] ${failedCount}/${results.length} email(s) failed for showtime #${id}`);
+        results
+          .filter(r => r.status === 'rejected')
+          .forEach(r => console.error('[updateShowtime] Email error:', r.reason));
+      }
+    }
+  }
+
+  return updatedShowtime;
 };
 
 

@@ -10,20 +10,17 @@ const mailer = require('../utils/mailer');
 
 const QRCode = require('qrcode');
 // booking_service.js — generateQRBase64
-const generateQRBase64 = async (bookingId) => {
-  const base64 = await QRCode.toDataURL(bookingId.toString(), // ✅ đồng bộ với frontend
-    {
-      width: 200,
-      margin: 2,
-      color: { dark: '#000000', light: '#ffffff' }
-    }
-  );
-  return base64;
+const generateQRBuffer = async (bookingId) => {
+  return await QRCode.toBuffer(bookingId.toString(), {
+    width: 200,
+    margin: 2,
+    color: { dark: '#000000', light: '#ffffff' }
+  });
 };
 // ─────────────────────────────────────────────
 // HELPER: Build email xác nhận đặt vé thành công
 // ─────────────────────────────────────────────
-const buildBookingSuccessEmail = ({ userName, bookingId, movieTitle, showtime, tickets, bookingItems, totalPrice, pointsEarned,qrBase64 }) => {
+const buildBookingSuccessEmail = ({ userName, bookingId, movieTitle, showtime, tickets, bookingItems, totalPrice, pointsEarned,qrCid}) => {
 
   const timeFormatted = moment(showtime.start_time).utcOffset(7).format('HH:mm');
   const dateFormatted = moment(showtime.start_time).utcOffset(7).format('DD/MM/YYYY');
@@ -42,11 +39,11 @@ const buildBookingSuccessEmail = ({ userName, bookingId, movieTitle, showtime, t
     ? `<p style="color:#27ae60; margin:8px 0;">🎁 Bạn vừa tích được <b>+${pointsEarned} điểm</b> từ đơn hàng này.</p>`
     : '';
   
-  const qrBlock = qrBase64 ? `
+  const qrBlock = qrCid? `
     <div style="text-align:center; margin:24px 0;">
       <p style="color:#fff; font-weight:bold; margin-bottom:12px;">📱 Mã QR check-in của bạn:</p>
       <img
-        src="${qrBase64}"
+        src="${qrCid}"
         alt="QR Code booking #${bookingId}"
         width="180"
         style="border:6px solid #fff; border-radius:8px; display:block; margin:0 auto;"
@@ -498,13 +495,21 @@ exports.markBookingAsPaid = async (bookingId) => {
           bookingItems: bookingDetail.products,
           totalPrice:   bookingDetail.total_price,
           pointsEarned: bookingDetail.points_earned,
-          qrBase64:     await generateQRBase64(bookingDetail.booking_id)
+          sqrCid: `cid:qr-${bookingDetail.booking_id}` 
         });
 
         await mailer.sendEmail(
           user.email,
           `[BossTicket] Xác nhận đặt vé #${bookingDetail.booking_id} thành công`,
-          mailContent
+          mailContent,
+          [
+            {
+              filename: `qr-${bookingDetail.booking_id}.png`,
+              content: await generateQRBuffer(bookingDetail.booking_id),
+              cid: `qr-${bookingDetail.booking_id}`,
+              contentDisposition: 'inline'
+            }
+          ]
         );
       }
     } catch (mailErr) {

@@ -21,7 +21,7 @@
 const nodemailer = require('nodemailer');
 
 
-exports.sendEmail = async (to, subject, html) => {
+exports.sendEmail = async (to, subject, html, attachments = []) => {
   const transporter = nodemailer.createTransport({
     service: 'Gmail',
     auth: {
@@ -35,6 +35,7 @@ exports.sendEmail = async (to, subject, html) => {
     to: to,           // Truyền tham số to vào đây
     subject: subject, // Truyền tham số subject vào đây
     html: html,       // Truyền tham số html vào đây
+    attachments
   };
 
   // Trả về kết quả gửi mail

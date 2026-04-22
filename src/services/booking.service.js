@@ -866,6 +866,48 @@ exports.updateBookingStatus = async (bookingId, status) => {
   }
 };
 
+exports.expireSuccessBookings = async () => {
+  const endedShowtimes = await Showtime.findAll({
+    include: [{ model: Movie, as: 'movie', attributes: ['duration'] }],
+    where: {
+      // Lọc sơ bộ: chỉ lấy suất chiếu bắt đầu trước thời điểm hiện tại
+      start_time: { [Op.lt]: new Date() }
+    }
+  });
+
+  const now = new Date();
+
+  const endedShowtimeIds = endedShowtimes
+    .filter(s => {
+      const endTime = new Date(
+        new Date(s.start_time).getTime() +
+        (s.movie?.duration || 0) * 60 * 1000
+      );
+      return endTime < now;
+    })
+    .map(s => s.id);
+
+  if (endedShowtimeIds.length === 0) {
+    return { updated: 0 };
+  }
+
+  const [updatedCount] = await Booking.update(
+    { status: 'NO_SHOW' },
+    {
+      where: {
+        showtime_id: { [Op.in]: endedShowtimeIds },
+        status: 'SUCCESS'
+      }
+    }
+  );
+
+  if (updatedCount > 0) {
+    console.log(`[ExpireSuccess] Đã chuyển ${updatedCount} booking SUCCESS → NO_SHOW cho các suất chiếu đã kết thúc.`);
+  }
+
+  return { updated: updatedCount };
+};
+
 exports.checkInBooking = async (bookingId) => {
   const booking = await Booking.findByPk(bookingId, {
     include: [
@@ -906,6 +948,7 @@ exports.checkInBooking = async (bookingId) => {
   if (booking.status !== 'SUCCESS') {
     if (booking.status === 'USED') throw new Error('BOOKING_ALREADY_USED');
     if (booking.status === 'CANCELLED') throw new Error('BOOKING_CANCELLED');
+    if (booking.status === 'NO_SHOW') throw new Error('BOOKING_NO_SHOW');
     throw new Error('INVALID_STATUS_FOR_CHECKIN');
   }
 

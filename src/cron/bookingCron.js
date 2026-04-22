@@ -18,6 +18,18 @@ const startBookingCron = () => {
     }
   });
 
+   cron.schedule('*/15 * * * *', async () => {
+    console.log('[CRON] Kiểm tra booking SUCCESS cần chuyển sang NO_SHOW...');
+    try {
+      const result = await bookingService.expireSuccessBookings();
+      if (result.updated > 0) {
+        console.log(`[CRON] Đã chuyển ${result.updated} booking SUCCESS → NO_SHOW cho các suất chiếu đã kết thúc mà không sử dụng`);
+      }
+    } catch (err) {
+      console.error('[CRON] Lỗi expire SUCCESS:', err.message);
+    }
+  });
+
   cron.schedule('*/5 * * * *', async () => {
     console.log('[CRON] Kiểm tra gửi mail nhắc nhở suất chiếu...');
     try {

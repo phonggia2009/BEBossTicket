@@ -7,6 +7,109 @@ const userService = require('./user.service'); // Import userService để log l
 const EXPIRE_MINUTES = 15;
 const moment = require('moment');
 const mailer = require('../utils/mailer');
+
+// ─────────────────────────────────────────────
+// HELPER: Build email xác nhận đặt vé thành công
+// ─────────────────────────────────────────────
+const buildBookingSuccessEmail = ({ userName, bookingId, movieTitle, showtime, tickets, bookingItems, totalPrice, pointsEarned }) => {
+
+  const timeFormatted = moment(showtime.start_time).utcOffset(7).format('HH:mm');
+  const dateFormatted = moment(showtime.start_time).utcOffset(7).format('DD/MM/YYYY');
+
+  const seatList = tickets.map(t =>
+    `<li>${t.seat.seat_row}${t.seat.seat_number} (${t.seat.seat_type}) — ${t.price.toLocaleString('vi-VN')}đ</li>`
+  ).join('');
+
+  const productList = bookingItems.length > 0
+    ? bookingItems.map(i =>
+        `<li>${i.product.product_name} x${i.quantity} — ${(i.price * i.quantity).toLocaleString('vi-VN')}đ</li>`
+      ).join('')
+    : '<li>Không có</li>';
+
+  const pointsLine = pointsEarned > 0
+    ? `<p style="color:#27ae60; margin:8px 0;">🎁 Bạn vừa tích được <b>+${pointsEarned} điểm</b> từ đơn hàng này.</p>`
+    : '';
+
+  return `
+    <table width="100%" cellpadding="0" cellspacing="0"
+      style="background-color:#0a0a0a; font-family:'Helvetica Neue',Arial,sans-serif;
+             line-height:1.6; color:#fff; padding:20px 0;">
+      <tr>
+        <td align="center">
+          <table style="background-color:#141414; width:100%; max-width:600px;
+                        border-radius:8px; overflow:hidden; border:1px solid #333;">
+
+            <!-- Header -->
+            <tr>
+              <td style="background-color:#e50914; padding:20px; text-align:center;">
+                <h1 style="color:#fff; margin:0; font-size:26px; letter-spacing:2px;">BOSSTICKET</h1>
+                <p style="color:#fff; margin:6px 0 0; font-size:14px;">Xác nhận đặt vé thành công</p>
+              </td>
+            </tr>
+
+            <!-- Body -->
+            <tr>
+              <td style="padding:30px 25px;">
+
+                <p style="color:#ccc; font-size:16px;">Xin chào <b style="color:#fff;">${userName}</b>,</p>
+                <p style="color:#ccc;">Đơn hàng <b style="color:#e50914;">#${bookingId}</b> của bạn đã được xác nhận thanh toán thành công!</p>
+
+                <!-- Thông tin phim -->
+                <div style="background:#1e1e1e; border-left:5px solid #e50914;
+                            padding:15px 20px; margin:20px 0; border-radius:0 4px 4px 0;">
+                  <p style="margin:0; font-size:20px; font-weight:bold; color:#fff;">
+                    🎬 ${movieTitle}
+                  </p>
+                  <p style="margin:6px 0 0; color:#aaa;">
+                    ⏰ ${timeFormatted} — ${dateFormatted}
+                  </p>
+                  <p style="margin:4px 0 0; color:#aaa;">
+                    🏠 ${showtime.room?.room_name} — ${showtime.room?.cinema?.cinema_name}
+                  </p>
+                </div>
+
+                <!-- Danh sách ghế -->
+                <p style="color:#fff; font-weight:bold; margin-bottom:6px;">🪑 Ghế đã đặt:</p>
+                <ul style="color:#ccc; padding-left:20px; margin:0 0 16px;">${seatList}</ul>
+
+                <!-- Bắp nước -->
+                <p style="color:#fff; font-weight:bold; margin-bottom:6px;">🍿 Bắp / Nước:</p>
+                <ul style="color:#ccc; padding-left:20px; margin:0 0 16px;">${productList}</ul>
+
+                <!-- Tổng tiền -->
+                <div style="border-top:1px solid #333; padding-top:16px; margin-top:8px;">
+                  <p style="font-size:18px; color:#fff; margin:0;">
+                    💳 Tổng thanh toán:
+                    <b style="color:#e50914;">${totalPrice.toLocaleString('vi-VN')}đ</b>
+                  </p>
+                  ${pointsLine}
+                </div>
+
+                <p style="color:#aaa; margin-top:24px; font-size:14px;">
+                  Vui lòng đến rạp sớm <b>10–15 phút</b> và xuất trình mã đơn hàng
+                  <b style="color:#fff;">#${bookingId}</b> tại quầy để nhận vé.
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="background:#000; padding:20px; text-align:center; border-top:1px solid #222;">
+                <p style="color:#888; font-size:13px; margin:0;">
+                  Cảm ơn bạn đã tin tưởng <b style="color:#fff;">BossTicket</b>.
+                </p>
+                <p style="color:#555; font-size:12px; margin:8px 0 0;">
+                  Đây là email tự động, vui lòng không trả lời lại email này.
+                </p>
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
+};
 // ─────────────────────────────────────────────
 // CREATE BOOKING
 // ─────────────────────────────────────────────
@@ -312,50 +415,83 @@ exports.markBookingAsPaid = async (bookingId) => {
 
   try {
     const booking = await Booking.findByPk(bookingId, { transaction: t });
-    
-    if (!booking) {
-      await t.rollback();
-      throw new Error('BOOKING_NOT_FOUND');
-    }
-
-    if (booking.status !== 'PENDING') {
-      await t.rollback();
-      return booking;
-    }
+    if (!booking) { await t.rollback(); throw new Error('BOOKING_NOT_FOUND'); }
+    if (booking.status !== 'PENDING') { await t.rollback(); return booking; }
 
     const user = await models.User.findByPk(booking.user_id, { transaction: t });
-    if (!user) {
-      await t.rollback();
-      throw new Error('USER_NOT_FOUND');
-    }
+    if (!user) { await t.rollback(); throw new Error('USER_NOT_FOUND'); }
 
-    // 👉 Cộng điểm
     if (booking.points_earned > 0) {
       await user.increment('points', { by: booking.points_earned, transaction: t });
-      
-      // 👉 Ghi log điểm
       await userService.logPointChange(
-        user.id, 
-        booking.points_earned, 
-        user.points + booking.points_earned, 
+        user.id,
+        booking.points_earned,
+        user.points + booking.points_earned,
         `Tích điểm từ đơn hàng thành công #${booking.booking_id}`,
         t
       );
     }
 
-    // 👉 Cập nhật booking
     await booking.update({ status: 'SUCCESS' }, { transaction: t });
-
     await t.commit();
-    return booking;
-  } catch (error) {
-    if (t && !t.finished) {
-      await t.rollback();
+
+    try {
+      const bookingDetail = await Booking.findByPk(bookingId, {
+        include: [
+          {
+            model: Showtime,
+            as: 'showtime',
+            paranoid: false,
+            include: [
+              { model: Movie, as: 'movie', attributes: ['title'] },
+              {
+                model: models.Room, as: 'room',
+                attributes: ['room_name'],
+                include: [{ model: models.Cinema, as: 'cinema', attributes: ['cinema_name'] }]
+              }
+            ]
+          },
+          {
+            model: Ticket, as: 'tickets',
+            include: [{ model: Seat, as: 'seat', attributes: ['seat_row', 'seat_number', 'seat_type'] }]
+          },
+          {
+            model: BookingItem, as: 'products',
+            include: [{ model: Product, as: 'product', attributes: ['product_name'] }]
+          }
+        ]
+      });
+
+      if (user.email && bookingDetail) {
+        const mailContent = buildBookingSuccessEmail({
+          userName:     user.fullName || 'Quý khách',
+          bookingId:    bookingDetail.booking_id,
+          movieTitle:   bookingDetail.showtime.movie.title,
+          showtime:     bookingDetail.showtime,
+          tickets:      bookingDetail.tickets,
+          bookingItems: bookingDetail.products,
+          totalPrice:   bookingDetail.total_price,
+          pointsEarned: bookingDetail.points_earned
+        });
+
+        await mailer.sendEmail(
+          user.email,
+          `[BossTicket] Xác nhận đặt vé #${bookingDetail.booking_id} thành công`,
+          mailContent
+        );
+      }
+    } catch (mailErr) {
+      // Lỗi gửi mail KHÔNG được làm hỏng luồng thanh toán
+      console.error(`[markBookingAsPaid] Gửi mail thất bại cho booking #${bookingId}:`, mailErr.message);
     }
+
+    return booking;
+
+  } catch (error) {
+    if (t && !t.finished) await t.rollback();
     throw error;
   }
 };
-
 // ─────────────────────────────────────────────
 // LẤY CHI TIẾT 1 ĐƠN HÀNG KÈM CHECK QUYỀN SỞ HỮU
 // ─────────────────────────────────────────────

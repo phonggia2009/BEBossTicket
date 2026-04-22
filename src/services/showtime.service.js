@@ -285,7 +285,7 @@ exports.updateShowtime = async (id, data) => {
         .map(booking => {
           const mailContent = buildChangeNotificationEmail({
             userName: booking.user.full_name || 'Quý khách',
-            bookingId: booking.id,
+            bookingId: booking.booking_id,
             movieTitle,
             oldTimeFormatted,
             newTimeFormatted,

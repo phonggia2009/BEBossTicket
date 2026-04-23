@@ -1,6 +1,8 @@
 const authService = require('../services/auth.service');
 const sendResponse = require('../utils/responseHelper');
 const { User } = require('../models');
+const { OAuth2Client } = require('google-auth-library');
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 exports.register = async (req, res) => {
   try {
     // Gọi sang Service để xử lý logic
@@ -76,6 +78,60 @@ exports.login = async (req, res) => {
       return sendResponse(res, 403, 'Tài khoản chưa được xác thực. Vui lòng kiểm tra email để xác thực tài khoản!');
     }
     return sendResponse(res, 500, 'Lỗi hệ thống khi đăng nhập!', { error: error.message });
+  }
+};
+
+exports.loginGoogle = async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    // Xác minh token với Google
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const { email, name, sub: googleId, picture } = payload;
+
+    // Tìm user theo email
+    let user = await User.findOne({ where: { email } });
+
+    if (!user) {
+      // Nếu chưa có, tạo user mới
+      user = await User.create({
+        fullName: name,
+        email: email,
+        googleId: googleId,
+        avatarUrl: picture,
+        isVerified: true, // Google đã xác minh email rồi
+        role: 'USER'
+      });
+    } else {
+      // Nếu user đã tồn tại bằng cách đăng ký tay trước đó nhưng nay đăng nhập Google
+      if (!user.googleId) {
+        await user.update({ googleId, isVerified: true });
+      }
+    }
+
+    // Ở đây bạn sử dụng hàm sinh token nội bộ (JWT) giống như trong authService.loginUser
+    // Thay authService.generateToken bằng hàm thực tế bạn đang dùng trong auth.service.js
+    const jwtToken = await authService.generateToken(user); 
+
+    return sendResponse(res, 200, 'Đăng nhập Google thành công!', {
+      token: jwtToken,
+      user: {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        avatarUrl: user.avatarUrl,
+        points: user.points || 0
+      }
+    });
+
+  } catch (error) {
+    console.error("Lỗi đăng nhập Google:", error);
+    return sendResponse(res, 401, 'Xác thực Google thất bại!');
   }
 };
 

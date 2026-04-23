@@ -141,10 +141,17 @@ exports.resetPassword = async (token, newPassword) => {
 
   if (!user) throw new Error('TOKEN_INVALID_OR_EXPIRED');
 
-  // Cập nhật mật khẩu mới (hàm hash mật khẩu sẽ tự chạy nếu bạn dùng hooks trong model)
   await user.update({ 
     password: newPassword, 
     resetToken: null, 
     resetTokenExpires: null 
   });
+};
+// Thêm vào auth.service.js
+exports.generateToken = (user) => {
+  return jwt.sign(
+    { id: user.id, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
 };

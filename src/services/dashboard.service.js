@@ -3,7 +3,7 @@ const { Op } = require('sequelize');
 
 exports.getDashboardStats = async () => {
   const totalRevenue = await Booking.sum('total_price', {
-    where: { status: 'SUCCESS' }
+      status: ['SUCCESS', 'NO_SHOW'] 
   }) || 0;
 
   // 2. TỔNG BOOKING & PHÂN BỔ TRẠNG THÁI

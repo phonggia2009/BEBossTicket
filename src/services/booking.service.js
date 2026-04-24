@@ -983,7 +983,7 @@ exports.forceCancelBooking = async (bookingId) => {
 };
 // [ADMIN] CẬP NHẬT TRẠNG THÁI BOOKING (Trường hợp đặc biệt)
 exports.updateBookingStatus = async (bookingId, status) => {
-  const validStatuses = ['PENDING', 'SUCCESS', 'CANCELLED']; 
+  const validStatuses = ['PENDING', 'SUCCESS', 'CANCELLED','USED', 'NO_SHOW']; 
   if (!validStatuses.includes(status)) {
     throw new Error('INVALID_STATUS');
   }

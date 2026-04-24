@@ -2,11 +2,11 @@ require('dotenv').config();
 
 process.env.TZ = 'Asia/Ho_Chi_Minh';
 
-Date.prototype.toJSON = function () {
-  const tzOffset = this.getTimezoneOffset() * 60000; // Độ lệch múi giờ
-  const localTime = new Date(this.getTime() - tzOffset);
-  return localTime.toISOString().slice(0, 19).replace('T', ' '); 
-};
+// Date.prototype.toJSON = function () {
+//   const tzOffset = this.getTimezoneOffset() * 60000; // Độ lệch múi giờ
+//   const localTime = new Date(this.getTime() - tzOffset);
+//   return localTime.toISOString().slice(0, 19).replace('T', ' '); 
+// };
 
 const http = require('http');
 const app = require('./src/app'); 

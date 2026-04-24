@@ -1020,8 +1020,7 @@ exports.updateBookingStatus = async (bookingId, status) => {
         if (user) {
           // Cộng điểm cho user
           await user.increment('points', { by: booking.points_earned, transaction: t });
-          
-          // 👉 FIX LỖ HỔNG: Ghi log biến động điểm ngay trong transaction
+      
           await userService.logPointChange(
             user.id,
             booking.points_earned,

@@ -17,30 +17,42 @@ require('./src/models');
 
 const startServer = async () => {
   try {
-    console.log("DB URL:", process.env.DATABASE_URL ? "✔ Có" : "❌ Không có");
-
-    await sequelize.authenticate();
-    console.log('✅ DB connected');
-
-    // 👉 sync trước khi làm gì khác
-    await sequelize.sync({ alter: true });
-    console.log('📦 DB synced');
+    console.log("-----------------------------------------");
+    console.log("Môi trường:", process.env.NODE_ENV || 'development');
+    console.log("DB URL:", process.env.DATABASE_URL ? "✔ Đã cấu hình" : "❌ Chưa cấu hình (Dùng Local)");
     
+    // 1. Kiểm tra kết nối
+    await sequelize.authenticate();
+    console.log('✅ Kết nối Database thành công');
+
+    // 2. Đồng bộ Database an toàn
+    if (process.env.NODE_ENV === 'production') {
+      await sequelize.sync(); 
+      console.log('📦 DB synced (Production Mode - Safe)');
+    } else {
+      // Ở Local, cho phép alter để code cho nhanh
+      await sequelize.sync({ alter: true });
+      console.log('📦 DB synced (Development Mode - Alter)');
+    }
+    
+    // 3. Khởi động các tiến trình ngầm (Cronjob)
     startBookingCron();   
     
-    // 👉 chỉ start server sau khi DB OK
+    // 4. Khởi động HTTP & Socket Server
     const server = http.createServer(app);
     socketUtil.init(server);
 
     const PORT = process.env.PORT || 5000;
 
     server.listen(PORT, () => {
-      console.log(`🚀 Server running at ${PORT} - Múi giờ: ${process.env.TZ}`);
+      console.log(`🚀 Server running at PORT: ${PORT}`);
+      console.log(`🕒 Timezone hệ thống: ${process.env.TZ}`);
+      console.log("-----------------------------------------");
     });
 
   } catch (error) {
-    console.error('❌ DB Error:', error);
-    process.exit(1);
+    console.error('❌ Lỗi khởi động Server (DB Error):', error);
+    process.exit(1); // Thoát tiến trình ngay nếu DB lỗi để tránh app chạy sai
   }
 };
 

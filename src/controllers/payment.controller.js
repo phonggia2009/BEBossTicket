@@ -80,7 +80,7 @@ exports.createVnpayUrl = async (req, res) => {
     const vnpUrl    = process.env.VNP_URL;
     const returnUrl = process.env.VNP_RETURN_URL;
 
-    const createDate = moment().format('YYYYMMDDHHmmss');
+    const createDate = moment().utcOffset(7).format('YYYYMMDDHHmmss');
     const txnRef = `${booking.booking_id}_${Date.now()}`;
 
     let vnp_Params = {

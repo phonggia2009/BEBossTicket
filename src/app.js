@@ -56,7 +56,7 @@ app.use(maintenanceMiddleware); // 2. Kiểm tra bảo trì sau khi đã có req
 // KHAI BÁO TẤT CẢ CÁC ROUTES Ở ĐÂY
 app.use('/api/auth', authRoutes);
 app.use('/api/users', require('./routes/user.routes'));
-app.use('/api/movies', require('./routes/movie.routes'));
+app.use('/api/movie', require('./routes/movie.routes'));
 app.use('/api/genres', require('./routes/genre.routes'));
 app.use('/api/cinemas', require('./routes/cinema.routes'));
 app.use('/api/rooms', require('./routes/room.routes'));

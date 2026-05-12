@@ -3,10 +3,9 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 exports.moderateComment = async (content) => {
   try {
-    // 1. Sửa lại đúng tên model: gemini-1.5-flash
     // 2. Bổ sung generationConfig ép API trả về chuẩn JSON 100%
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: "gemini-2.5-flash",
       generationConfig: {
         responseMimeType: "application/json",
       }
@@ -53,7 +52,7 @@ exports.generateFallbackResponse = async (message, history, dbContext = "") => {
   // 🔥 Luồng xử lý chính + Retry + Fallback
   try {
     // Dùng bản 1.5-flash cụ thể thay vì "latest" để tránh lỗi không tương thích khi Google update
-    return await tryModel("gemini-1.5-flash");
+    return await tryModel("gemini-2.5-flash");
   } catch (err) {
     const errorMessage = String(err.message || err.status || "");
     console.log("⚠️ Flash gặp lỗi:", errorMessage);
@@ -63,10 +62,10 @@ exports.generateFallbackResponse = async (message, history, dbContext = "") => {
       try {
         console.log("⏳ Đang thử lại (Retry) sau 1 giây...");
         await new Promise(r => setTimeout(r, 1000));
-        return await tryModel("gemini-1.5-flash");
+        return await tryModel("gemini-2.5-flash");
       } catch (err2) {
-        console.log("⚠️ Retry vẫn lỗi → Kích hoạt Fallback sang gemini-1.5-pro");
-        return await tryModel("gemini-1.5-pro");
+        console.log("⚠️ Retry vẫn lỗi → Kích hoạt Fallback sang gemini-2.5-pro");
+        return await tryModel("gemini-2.5-pro");
       }
     }
 

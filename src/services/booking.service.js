@@ -289,6 +289,7 @@ exports.createBooking = async (userId, bookingData) => {
       }
 
       // Trừ điểm của user ngay khi tạo đơn
+      const currentPoints = user.points || 0;
       const newPoints = currentPoints - pointsUsedValue;
       await user.decrement('points', { by: pointsUsedValue, transaction: t });
       
@@ -936,6 +937,7 @@ exports.forceCancelBooking = async (bookingId) => {
     
     const user = await models.User.findByPk(booking.user_id, { transaction: t });
     if (user) {
+      let currentPoints = user.points || 0;
       // TRƯỜNG HỢP 1: Nếu lúc đặt có dùng điểm -> Hoàn lại điểm
       if (booking.points_used > 0) {
         currentPoints += booking.points_used; // Cộng dồn

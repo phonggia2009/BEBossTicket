@@ -118,12 +118,12 @@ exports.createVnpayUrl = async (req, res) => {
 // ─────────────────────────────────────────────
 // RETURN URL (redirect browser)
 // ─────────────────────────────────────────────
+
 exports.vnpayReturn = async (req, res) => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
   try {
     let vnp_Params = { ...req.query };
-
     const secureHash = vnp_Params.vnp_SecureHash;
 
     delete vnp_Params.vnp_SecureHash;
@@ -145,34 +145,37 @@ exports.vnpayReturn = async (req, res) => {
       return res.redirect(`${frontendUrl}/payment/result?status=not_found`);
     }
 
-    // Nếu đơn đã xử lý xong (PAID, CANCELLED, EXPIRED...) thì không xử lý lại
+    // 🚀 TỐI ƯU UX: Bắt trường hợp IPN đã chạy trước và đổi sang SUCCESS
+    if (booking.status === 'SUCCESS' && responseCode === '00') {
+      return res.redirect(`${frontendUrl}/payment/result?status=success&bookingId=${bookingId}`);
+    }
+
+    // Nếu đơn đã huỷ, thất bại từ trước
     if (booking.status !== 'PENDING') {
       return res.redirect(`${frontendUrl}/payment/result?status=already`);
     }
 
+    // Trường hợp IPN bị chậm, Return chạy trước
     if (responseCode === '00') {
-      // Thanh toán thành công -> Cập nhật trạng thái PAID
       await bookingService.markBookingAsPaid(bookingId, 'SUCCESS');
       return res.redirect(`${frontendUrl}/payment/result?status=success&bookingId=${bookingId}`);
     } else {
       await bookingService.cancelBooking(booking.booking_id, 'CANCELLED');
-      // Thêm &bookingId=${bookingId} vào đây
       return res.redirect(`${frontendUrl}/payment/result?status=failed&bookingId=${bookingId}`);
     }
 
   } catch (error) {
-    console.error(error);
+    console.error("Lỗi tại VNPay Return:", error);
     return res.redirect(`${frontendUrl}/payment/result?status=error`);
   }
 };
 
 // ─────────────────────────────────────────────
-// IPN (quan trọng nhất)
+// IPN (Xử lý giao dịch ngầm, Backend - Backend)
 // ─────────────────────────────────────────────
 exports.vnpayIpn = async (req, res) => {
   try {
     let vnp_Params = { ...req.query };
-
     const secureHash = vnp_Params.vnp_SecureHash;
 
     delete vnp_Params.vnp_SecureHash;
@@ -181,7 +184,6 @@ exports.vnpayIpn = async (req, res) => {
     const secretKey = process.env.VNP_HASHSECRET;
     const checkSum = createVnpSignature(vnp_Params, secretKey);
 
-    // 1. Kiểm tra chữ ký bảo mật
     if (secureHash !== checkSum) {
       return res.status(200).json({ RspCode: '97', Message: 'Invalid Checksum' });
     }
@@ -191,37 +193,30 @@ exports.vnpayIpn = async (req, res) => {
     const responseCode = vnp_Params.vnp_ResponseCode;
     const amount = parseInt(vnp_Params.vnp_Amount);
 
-    // 2. Tìm đơn hàng
     const booking = await Booking.findByPk(bookingId);
     if (!booking) {
       return res.status(200).json({ RspCode: '01', Message: 'Not found' });
     }
 
-    // 3. Kiểm tra số tiền
     if (Number(booking.total_price) * 100 !== amount) {
       return res.status(200).json({ RspCode: '04', Message: 'Invalid amount' });
     }
-
-    // 4. Kiểm tra trạng thái đơn hàng (chỉ xử lý khi đang PENDING)
     if (booking.status !== 'PENDING') {
-      return res.status(200).json({ RspCode: '02', Message: 'Already updated' });
+      return res.status(200).json({ RspCode: '02', Message: 'Order already confirmed' });
     }
 
-    // 5. Xử lý kết quả thanh toán
+    // 🚀 Xử lý cập nhật DB
     if (responseCode === '00') {
-      // Thanh toán thành công
       await bookingService.markBookingAsPaid(bookingId, 'SUCCESS');
     } else {
-      // Thanh toán thất bại hoặc bị hủy -> Gọi hàm xử lý hủy toàn diện
-      // Hàm này xử lý đổi trạng thái Booking, hủy Ticket và cộng lại số lượng bắp nước.
       await bookingService.cancelBooking(booking.booking_id, 'CANCELLED');
     }
 
-    // 6. Trả về kết quả thành công cho VNPay để họ không gửi lại IPN nữa
-    return res.status(200).json({ RspCode: '00', Message: 'Success' });
+    return res.status(200).json({ RspCode: '00', Message: 'Confirm Success' });
 
   } catch (error) {
     console.error("Lỗi tại VNPay IPN:", error);
+    // Báo lỗi hệ thống để VNPay có thể retry lại sau
     return res.status(200).json({ RspCode: '99', Message: 'Unknown error' });
   }
 };

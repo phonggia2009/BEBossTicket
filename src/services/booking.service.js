@@ -467,65 +467,68 @@ exports.markBookingAsPaid = async (bookingId) => {
     await booking.update({ status: 'SUCCESS' }, { transaction: t });
     await t.commit();
 
-    try {
-      const bookingDetail = await Booking.findByPk(bookingId, {
-        include: [
-          {
-            model: Showtime,
-            as: 'showtime',
-            paranoid: false,
-            include: [
-              { model: Movie, as: 'movie', attributes: ['title'] },
-              {
-                model: models.Room, as: 'room',
-                attributes: ['room_name'],
-                include: [{ model: models.Cinema, as: 'cinema', attributes: ['cinema_name'] }]
-              }
-            ]
-          },
-          {
-            model: Ticket, as: 'tickets',
-            include: [{ model: Seat, as: 'seat', attributes: ['seat_row', 'seat_number', 'seat_type'] }]
-          },
-          {
-            model: BookingItem, as: 'products',
-            include: [{ model: Product, as: 'product', attributes: ['product_name'] }]
-          }
-        ]
-      });
-
-      if (user.email && bookingDetail) {
-        const mailContent = buildBookingSuccessEmail({
-          userName:     user.fullName || 'Quý khách',
-          bookingId:    bookingDetail.booking_id,
-          movieTitle:   bookingDetail.showtime.movie.title,
-          showtime:     bookingDetail.showtime,
-          tickets:      bookingDetail.tickets,
-          bookingItems: bookingDetail.products,
-          totalPrice:   bookingDetail.total_price,
-          pointsEarned: bookingDetail.points_earned,
-          qrCid: `cid:qr-${bookingDetail.booking_id}` 
-        });
-
-        await mailer.sendEmail(
-          user.email,
-          `[BossTicket] Xác nhận đặt vé #${bookingDetail.booking_id} thành công`,
-          mailContent,
-          [
+    (async () => {
+      try {
+        const bookingDetail = await Booking.findByPk(bookingId, {
+          include: [
             {
-              filename: `qr-${bookingDetail.booking_id}.png`,
-              content: await generateQRBuffer(bookingDetail.booking_id),
-              cid: `qr-${bookingDetail.booking_id}`,
-              contentDisposition: 'inline'
+              model: Showtime, as: 'showtime', paranoid: false,
+              include: [
+                { model: Movie, as: 'movie', attributes: ['title'] },
+                {
+                  model: models.Room, as: 'room', attributes: ['room_name'],
+                  include: [{ model: models.Cinema, as: 'cinema', attributes: ['cinema_name'] }]
+                }
+              ]
+            },
+            {
+              model: Ticket, as: 'tickets',
+              include: [{ model: Seat, as: 'seat', attributes: ['seat_row', 'seat_number', 'seat_type'] }]
+            },
+            {
+              model: BookingItem, as: 'products',
+              include: [{ model: Product, as: 'product', attributes: ['product_name'] }]
             }
           ]
-        );
-      }
-    } catch (mailErr) {
-      // Lỗi gửi mail KHÔNG được làm hỏng luồng thanh toán
-      console.error(`[markBookingAsPaid] Gửi mail thất bại cho booking #${bookingId}:`, mailErr.message);
-    }
+        });
 
+        if (user.email && bookingDetail) {
+          // Tạo QR Code
+          const qrBuffer = await generateQRBuffer(bookingDetail.booking_id);
+
+          const mailContent = buildBookingSuccessEmail({
+            userName:     user.fullName || 'Quý khách',
+            bookingId:    bookingDetail.booking_id,
+            movieTitle:   bookingDetail.showtime.movie.title,
+            showtime:     bookingDetail.showtime,
+            tickets:      bookingDetail.tickets,
+            bookingItems: bookingDetail.products,
+            totalPrice:   bookingDetail.total_price,
+            pointsEarned: bookingDetail.points_earned,
+            qrCid: `cid:qr-${bookingDetail.booking_id}` 
+          });
+
+          await mailer.sendEmail(
+            user.email,
+            `[BossTicket] Xác nhận đặt vé #${bookingDetail.booking_id} thành công`,
+            mailContent,
+            [
+              {
+                filename: `qr-${bookingDetail.booking_id}.png`,
+                content: qrBuffer,
+                cid: `qr-${bookingDetail.booking_id}`,
+                contentDisposition: 'inline'
+              }
+            ]
+          );
+        }
+      } catch (mailErr) {
+        // Lỗi gửi mail sẽ chỉ in ra console, không làm sập tiến trình chính
+        console.error(`[markBookingAsPaid] Gửi mail chạy ngầm thất bại cho booking #${bookingId}:`, mailErr.message);
+      }
+    })();
+
+    // Lập tức phản hồi kết quả cho Controller để kết thúc Request VNPay
     return booking;
 
   } catch (error) {

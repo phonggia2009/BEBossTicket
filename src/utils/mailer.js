@@ -3,17 +3,13 @@ require("dotenv").config();
 const nodemailer = require("nodemailer");
 
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: false,
 
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
-  },
-
-  tls: {
-    rejectUnauthorized: false,
   },
 
   connectionTimeout: 30000,
@@ -36,13 +32,24 @@ const sendEmail = async (
   html,
   attachments = []
 ) => {
-  return await transporter.sendMail({
-    from: process.env.SMTP_USER,
-    to,
-    subject,
-    html,
-    attachments,
-  });
+  try {
+    const info = await transporter.sendMail({
+      from: `"BossTicket Support" <${process.env.SMTP_USER}>`,
+      to,
+      subject,
+      html,
+      attachments,
+    });
+
+    console.log("MAIL SENT:", info.messageId);
+
+    return info;
+  } catch (error) {
+    console.log("SEND MAIL ERROR:");
+    console.log(error);
+
+    throw error;
+  }
 };
 
 module.exports = {

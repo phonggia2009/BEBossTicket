@@ -20,7 +20,8 @@ const transporter = nodemailer.createTransport({
   greetingTimeout: 10000,
   socketTimeout: 10000,
 });
-
+console.log(process.env.SMTP_USER);
+console.log(process.env.SMTP_PASS);
 /**
  * Kiểm tra SMTP khi server start
  */

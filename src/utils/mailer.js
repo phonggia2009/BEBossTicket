@@ -27,8 +27,9 @@ const nodemailer = require('nodemailer');
 exports.sendEmail = async (to, subject, html, attachments = []) => {
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com', // Dùng host thay vì service để kiểm soát được IPv4/IPv6
-    port: 465,
-    secure: true,           // true cho port 465 (SSL)
+    port: 587,
+    secure: false,  
+    requireTLS: true,        // false cho port 587 (TLS)
     family: 4,              // Ép dùng IPv4, tránh lỗi ENETUNREACH trên server không hỗ trợ IPv6
     auth: {
       user: process.env.SMTP_USER,

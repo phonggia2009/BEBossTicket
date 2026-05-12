@@ -18,32 +18,52 @@
 //   };
 //   return await transporter.sendMail(mailOptions);
 // };
-const dns = require('dns');
-dns.setDefaultResultOrder('ipv4first');
+// const dns = require('dns');
+// dns.setDefaultResultOrder('ipv4first');
 
-const nodemailer = require('nodemailer');
+// const nodemailer = require('nodemailer');
  
  
+// exports.sendEmail = async (to, subject, html, attachments = []) => {
+//   const transporter = nodemailer.createTransport({
+//     host: 'smtp.gmail.com', 
+//     port: 587,
+//     secure: false,  
+//     requireTLS: true,       
+//     family: 4,              
+//     auth: {
+//       user: process.env.SMTP_USER,
+//       pass: process.env.SMTP_PASS,
+//     },
+//   });
+ 
+//   const mailOptions = {
+//     from: '"BossTicket Support" <no-reply@bossticket.com>',
+//     to: to,
+//     subject: subject,
+//     html: html,
+//     attachments
+//   };
+ 
+//   return await transporter.sendMail(mailOptions);
+// };
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 exports.sendEmail = async (to, subject, html, attachments = []) => {
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', // Dùng host thay vì service để kiểm soát được IPv4/IPv6
-    port: 587,
-    secure: false,  
-    requireTLS: true,        // false cho port 587 (TLS)
-    family: 4,              // Ép dùng IPv4, tránh lỗi ENETUNREACH trên server không hỗ trợ IPv6
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
+  const formattedAttachments = attachments.map(att => ({
+    filename: att.filename,
+    content: att.content,      // Buffer được hỗ trợ trực tiếp
+  }));
+
+  const { data, error } = await resend.emails.send({
+    from: 'BossTicket <onboarding@resend.dev>',
+    to,
+    subject,
+    html,
+    attachments: formattedAttachments,
   });
- 
-  const mailOptions = {
-    from: '"BossTicket Support" <no-reply@bossticket.com>',
-    to: to,
-    subject: subject,
-    html: html,
-    attachments
-  };
- 
-  return await transporter.sendMail(mailOptions);
+
+  if (error) throw new Error(error.message);
+  return data;
 };

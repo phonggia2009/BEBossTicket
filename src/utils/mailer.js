@@ -19,25 +19,27 @@
 //   return await transporter.sendMail(mailOptions);
 // };
 const nodemailer = require('nodemailer');
-
-
+ 
+ 
 exports.sendEmail = async (to, subject, html, attachments = []) => {
   const transporter = nodemailer.createTransport({
-    service: 'Gmail',
+    host: 'smtp.gmail.com', // Dùng host thay vì service để kiểm soát được IPv4/IPv6
+    port: 465,
+    secure: true,           // true cho port 465 (SSL)
+    family: 4,              // Ép dùng IPv4, tránh lỗi ENETUNREACH trên server không hỗ trợ IPv6
     auth: {
-      user: process.env.SMTP_USER, // Hãy chắc chắn biến môi trường trên Render của bạn tên là SMTP_USER
-      pass: process.env.SMTP_PASS, // Và SMTP_PASS
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
     },
   });
-
+ 
   const mailOptions = {
     from: '"BossTicket Support" <no-reply@bossticket.com>',
-    to: to,           // Truyền tham số to vào đây
-    subject: subject, // Truyền tham số subject vào đây
-    html: html,       // Truyền tham số html vào đây
+    to: to,
+    subject: subject,
+    html: html,
     attachments
   };
-
-  // Trả về kết quả gửi mail
+ 
   return await transporter.sendMail(mailOptions);
 };

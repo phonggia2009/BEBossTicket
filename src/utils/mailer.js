@@ -21,29 +21,47 @@
 // const dns = require('dns');
 // dns.setDefaultResultOrder('ipv4first');
 
-const nodemailer = require('nodemailer');
+// const nodemailer = require('nodemailer');
  
  
-exports.sendEmail = async (to, subject, html, attachments = []) => {
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', 
-    port: 587,
-    secure: false,  
-    requireTLS: true,       
-    family: 4,              
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
+// exports.sendEmail = async (to, subject, html, attachments = []) => {
+//   const transporter = nodemailer.createTransport({
+//     host: 'smtp.gmail.com', 
+//     port: 587,
+//     secure: false,  
+//     requireTLS: true,       
+//     family: 4,              
+//     auth: {
+//       user: process.env.SMTP_USER,
+//       pass: process.env.SMTP_PASS,
+//     },
+//   });
  
-  const mailOptions = {
-    from: '"BossTicket Support" <no-reply@bossticket.com>',
-    to: to,
-    subject: subject,
-    html: html,
-    attachments
-  };
+//   const mailOptions = {
+//     from: '"BossTicket Support" <no-reply@bossticket.com>',
+//     to: to,
+//     subject: subject,
+//     html: html,
+//     attachments
+//   };
  
-  return await transporter.sendMail(mailOptions);
-};
+//   return await transporter.sendMail(mailOptions);
+// };
+require("dotenv").config();
+const nodemailer = require("nodemailer");
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+transporter.verify((error, success) => {
+  if (error) {
+    console.log(error);
+  } else {
+    console.log("SMTP OK");
+  }
+});

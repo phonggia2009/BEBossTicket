@@ -4,7 +4,9 @@ const nodemailer = require("nodemailer");
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
+
+  port: Number(process.env.SMTP_PORT),
+
   secure: false,
 
   auth: {
@@ -34,10 +36,14 @@ const sendEmail = async (
 ) => {
   try {
     const info = await transporter.sendMail({
-      from: `"BossTicket Support" <${process.env.SMTP_USER}>`,
+      from: '"BossTicket Support" <test@bossticket.com>',
+
       to,
+
       subject,
+
       html,
+
       attachments,
     });
 

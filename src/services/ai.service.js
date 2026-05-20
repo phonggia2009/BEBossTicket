@@ -3,8 +3,6 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 exports.moderateComment = async (content) => {
   try {
-    // 1. Sửa lại đúng tên model: gemini-1.5-flash
-    // 2. Bổ sung generationConfig ép API trả về chuẩn JSON 100%
     const model = genAI.getGenerativeModel({ 
       model: "gemini-2.5-flash",
       generationConfig: {

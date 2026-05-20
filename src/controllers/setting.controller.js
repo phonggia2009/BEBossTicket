@@ -4,7 +4,11 @@ const getSettings = async (req, res) => {
   try {
     const [setting] = await Setting.findOrCreate({
       where: { id: 1 },
-      defaults: { maintenanceMode: false, bannerMovies: [] } 
+      defaults: { 
+        maintenanceMode: false, 
+        bannerMovies: [],
+      pointToMoneyRate: 1000, 
+      moneyToPointRate: 100000 } 
     });
     return res.status(200).json(setting);
   } catch (error) {
@@ -15,14 +19,14 @@ const getSettings = async (req, res) => {
 
 const updateSettings = async (req, res) => {
   try {
-    const { maintenanceMode, bannerMovies } = req.body;
+    const { maintenanceMode, bannerMovies, pointToMoneyRate, moneyToPointRate } = req.body;
     
     if (bannerMovies && bannerMovies.length > 3) {
       return res.status(400).json({ message: 'Chỉ được chọn tối đa 3 phim làm banner' });
     }
 
     await Setting.update(
-      { maintenanceMode, bannerMovies },
+      { maintenanceMode, bannerMovies,pointToMoneyRate, moneyToPointRate },
       { where: { id: 1 } }
     );
     

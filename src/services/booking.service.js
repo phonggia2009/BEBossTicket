@@ -265,6 +265,10 @@ exports.createBooking = async (userId, bookingData) => {
       await voucher.increment('used_count', { by: 1, transaction: t });
     }
     
+    const setting = await models.Setting.findByPk(1, { transaction: t });
+    const pointToMoneyRate = setting ? setting.pointToMoneyRate : 1000;
+    const moneyToPointRate = setting ? setting.moneyToPointRate : 100000;
+
     const user = await models.User.findByPk(userId, { transaction: t, lock: t.LOCK.UPDATE });
     if (!user) throw new Error('USER_NOT_FOUND');
 
@@ -278,14 +282,14 @@ exports.createBooking = async (userId, bookingData) => {
       }
       
       // 100 điểm = 1000 VNĐ => 1 điểm = 10 VNĐ (tạm thời logic cũ là 1 điểm = 1 VNĐ)
-      pointsDiscount = bookingData.points_used * 1;
+      pointsDiscount = bookingData.points_used * pointToMoneyRate;
       pointsUsedValue = bookingData.points_used;
 
       // Đảm bảo không giảm quá số tiền thực tế cần thanh toán (sau khi áp voucher)
       const priceAfterVoucher = originalTotalPrice - discountAmount;
       if (pointsDiscount > priceAfterVoucher) {
         pointsDiscount = priceAfterVoucher;
-        pointsUsedValue = pointsDiscount;
+        pointsUsedValue = Math.floor(pointsDiscount / pointToMoneyRate); 
       }
 
       // Trừ điểm của user ngay khi tạo đơn

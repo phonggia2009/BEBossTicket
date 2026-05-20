@@ -2,6 +2,8 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database'); 
 
 const Setting = sequelize.define('Setting', {
+  moneyToPointRate: DataTypes.INTEGER,
+  pointToMoneyRate: DataTypes.INTEGER,
   maintenanceMode: { 
     type: DataTypes.BOOLEAN, 
     defaultValue: false 

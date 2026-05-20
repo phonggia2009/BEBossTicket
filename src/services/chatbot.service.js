@@ -35,19 +35,6 @@ const formatDatetime = (date) => {
 
 /**
  * Tính điểm tương đồng giữa query và tên phim (0–1).
- *
- * Bậc 1 — substring match (chính xác nhất):
- *   - title chứa toàn bộ query                  → 0.95
- *   - query chứa toàn bộ title (user gõ dài hơn) → 0.85
- *
- * Bậc 2 — word overlap (cho query nhiều từ):
- *   Tỉ lệ từ của query xuất hiện trong title.
- *   Chỉ tính nếu từ >= 2 ký tự để tránh nhiễu.
- *   Score = (từ khớp / tổng từ query) * 0.8
- *   → Điểm tối đa bậc 2 là 0.8, không bao giờ vượt bậc 1.
- *
- * Không dùng character-level fallback vì quá lỏng
- * (mọi tên phim đều chia sẻ các ký tự thông thường như a, e, i, o).
  */
 const similarityScore = (query, title) => {
   const q = normalize(query);
@@ -67,7 +54,6 @@ const similarityScore = (query, title) => {
 
 /**
  * Tìm phim phù hợp nhất với query từ danh sách movies.
- * Trả về [] nếu không có ứng viên đủ điểm.
  */
 const findMatchingMovies = (movies, query, threshold = 0.5) => {
   return movies
@@ -112,20 +98,19 @@ const getUpcomingShowtimes = async (movieId, limit = 5) => {
  * Format danh sách showtimes thành chuỗi hiển thị.
  */
 const formatShowtimes = (movie, showtimes) => {
-  if (!showtimes.length) return `Phim "${movie.title}" hiện chưa có suất chiếu.`;
+  if (!showtimes.length) return `Phim "${movie.title}" hiện chưa có suất chiếu trong thời gian tới.`;
 
   const feUrl = process.env.FRONTEND_URL;
 
-  const lines = showtimes.map(
-    (st) => {
-      const time = formatDatetime(st.start_time);
-      const cinema = st.room?.cinema?.cinema_name ?? 'N/A';
-      return ` 🕐 ${time} — 🏛 ${cinema} ${feUrl}/booking/${st.id}`;
-    }
-  );
+  const lines = showtimes.map((st) => {
+    const time = formatDatetime(st.start_time);
+    const cinema = st.room?.cinema?.cinema_name ?? 'N/A';
+    return ` 🕐 ${time} — 🏛 ${cinema}\n 🔗 Đặt ngay: ${feUrl}/booking/${st.id}`;
+  });
 
-  return `🎬 Suất chiếu "${movie.title}":\n${lines.join('\n')}`;
+  return `🎬 Lịch chiếu phim "${movie.title}":\n${lines.join('\n\n')}`;
 };
+
 // ─────────────────────────────────────────────
 // INTENT HANDLERS
 // ─────────────────────────────────────────────
@@ -138,13 +123,16 @@ const handleNumberSelection = async (msg, userId) => {
   if (!choices?.length) return null; // không có context → bỏ qua
 
   const index = parseInt(msg, 10) - 1;
-  if (index < 0 || index >= choices.length) return '⚠️ Lựa chọn không hợp lệ, hãy nhập số đúng trong danh sách.';
+  if (index < 0 || index >= choices.length) return '⚠️ Lựa chọn không hợp lệ, hãy nhập số đúng trong danh sách nhé.';
 
   const movie = choices[index];
   const showtimes = await getUpcomingShowtimes(movie.id);
   return formatShowtimes(movie, showtimes);
 };
 
+/**
+ * Xử lý: Thông tin Voucher / Mã giảm giá
+ */
 const handleVoucherInfo = async () => {
   const activeVouchers = await Voucher.findAll({
     where: { 
@@ -155,52 +143,48 @@ const handleVoucherInfo = async () => {
     order: [['end_date', 'ASC']]
   });
 
-  if (!activeVouchers.length) return 'Hiện tại hệ thống chưa có mã giảm giá hoặc khuyến mãi nào đang diễn ra.';
+  if (!activeVouchers.length) return 'Hiện tại BossTicket chưa có mã giảm giá hoặc khuyến mãi nào đang diễn ra. Bạn quay lại sau nhé!';
   
   const list = activeVouchers.map((v, i) => {
-    // Định dạng giá trị giảm dựa trên loại giảm giá (PERCENTAGE hoặc FIXED)
     const discountStr = v.discount_type === 'PERCENTAGE' 
       ? `${v.discount_value}%` 
       : `${v.discount_value.toLocaleString('vi-VN')}đ`;
-      
-      const titleStr = v.title ? ` - ${v.title}` : '';
-   return `  ${i + 1}. 🎟️ Mã [${v.code}]: Giảm ${discountStr}${titleStr} (HSD: ${formatDatetime(v.end_date)})`;
+    const titleStr = v.title ? ` - ${v.title}` : '';
+    return `  ${i + 1}. 🎟️ Mã [${v.code}]: Giảm ${discountStr}${titleStr} (HSD: ${formatDatetime(v.end_date)})`;
   }).join('\n');
   
   return `🎁 Danh sách mã giảm giá đang áp dụng:\n${list}`;
 };
+
 /**
- * Xử lý: phim đang chiếu / phim hôm nay.
+ * 1. Phim đang chiếu
  */
-// 1. Phim đang chiếu
 const handleNowPlaying = async () => {
   const movies = await Movie.findAll({
     where: {
-      releaseDate: { // Sửa ở đây
-        [Op.lte]: new Date() 
-      }
+      releaseDate: { [Op.lte]: new Date() }
     },
     limit: 8,
     attributes: ['title'],
-    order: [['releaseDate', 'DESC']], // Sửa cả ở phần sắp xếp
+    order: [['releaseDate', 'DESC']], 
   });
 
-  if (!movies.length) return 'Hiện chưa có phim nào đang chiếu.';
+  if (!movies.length) return 'Hiện rạp chưa có phim nào đang chiếu.';
   const list = movies.map((m, i) => `  ${i + 1}. ${m.title}`).join('\n');
   return `🎥 Phim đang chiếu:\n${list}`;
 };
 
-// 2. Phim sắp chiếu
+/**
+ * 2. Phim sắp chiếu
+ */
 const handleUpcomingMovies = async () => {
   const movies = await Movie.findAll({
     where: {
-      releaseDate: { // Sửa ở đây
-        [Op.gt]: new Date() 
-      }
+      releaseDate: { [Op.gt]: new Date() }
     },
     limit: 8,
     attributes: ['title'],
-    order: [['releaseDate', 'ASC']], // Sửa cả ở phần sắp xếp
+    order: [['releaseDate', 'ASC']], 
   });
 
   if (!movies.length) return 'Hiện chưa có thông tin phim sắp ra mắt.';
@@ -211,106 +195,89 @@ const handleUpcomingMovies = async () => {
 /**
  * Xử lý: truy vấn suất chiếu theo tên phim.
  */
-// Các từ cần loại bỏ khi trích tên phim ra khỏi câu lệnh
+// ĐÃ TỐI ƯU: Thêm các từ chỉ thời gian, đại từ để bóc tách tên phim cực chuẩn
 const STRIP_WORDS =
-  /\b(hay|tim|kiem|cho|biet|muon|giup|ban|toi|la|co|khong|va|de|xem|phim|suat chieu|gio chieu|lich chieu|dat ve|mua ve|xem phim)\b/g;
+  /\b(hay|tim|kiem|cho|biet|muon|giup|ban|toi|la|co|khong|va|de|xem|phim|suat chieu|gio chieu|lich chieu|dat ve|mua ve|xem phim|cac|nhung|ngay|hom|nay|hom nay|ngay mai|hom qua|cua|rap)\b/g;
 
 const handleShowtimeQuery = async (msg, userId) => {
   const DBG = (...args) => console.log('[CHATBOT_DEBUG][showtime]', ...args);
 
   const normalized = normalize(msg);
-  DBG('raw msg normalized :', JSON.stringify(normalized));
-
   const stripped = normalized
     .replace(STRIP_WORDS, '')
     .replace(/\s+/g, ' ')
     .trim();
 
-  DBG('after STRIP_WORDS  :', JSON.stringify(stripped));
+  DBG('after STRIP_WORDS:', JSON.stringify(stripped));
 
-  if (!stripped) return 'Bạn muốn xem suất chiếu của phim nào? Hãy cho tôi biết tên phim nhé 🎬';
+  // ĐÃ TỐI ƯU: Nếu không có tên phim, tự động gợi ý danh sách phim đang chiếu
+  if (!stripped) {
+    const nowPlayingList = await handleNowPlaying();
+    return `Bạn muốn xem lịch chiếu của phim nào ạ? Hãy nhập tên phim nhé 🎬\n\n💡 Hoặc bạn có thể tham khảo:\n${nowPlayingList.replace('🎥 Phim đang chiếu:\n', '')}`;
+  }
 
   const allMovies = await Movie.findAll({ attributes: ['id', 'title'] });
-  DBG('total movies in DB :', allMovies.length);
-
-  const scored = allMovies.map((m) => ({ title: m.title, score: similarityScore(stripped, m.title) }));
-  DBG('similarity scores  :', JSON.stringify(scored.sort((a, b) => b.score - a.score).slice(0, 5)));
-
   const matched = findMatchingMovies(allMovies, stripped);
-  DBG('matched movies     :', matched.map((m) => m.title));
 
-  if (matched.length === 0) return `😕 Không tìm thấy phim nào khớp với "${stripped}". Bạn thử tên khác không?`;
+  if (matched.length === 0) return `😕 Dạ, không tìm thấy phim nào khớp với từ khóa "${stripped}". Bạn kiểm tra lại tên phim giúp mình nhé!`;
 
   if (matched.length === 1) {
     const showtimes = await getUpcomingShowtimes(matched[0].id);
-    DBG('showtimes found    :', showtimes.length);
     return formatShowtimes(matched[0], showtimes);
   }
 
+  // Nếu có nhiều kết quả khớp, lưu vào cache để người dùng chọn số
   await cacheService.set(`movie_choices_${userId}`, matched.slice(0, 6), 300);
   const list = matched.slice(0, 6).map((m, i) => `  ${i + 1}. ${m.title}`).join('\n');
-  return `🔍 Tìm thấy nhiều phim:\n${list}\n\n👉 Nhập số để chọn phim bạn muốn xem.`;
+  return `🔍 Mình tìm thấy nhiều phim khớp với yêu cầu:\n${list}\n\n👉 Vui lòng nhập số (1-${matched.slice(0,6).length}) để chọn phim bạn muốn xem.`;
 };
 
 /**
  * Xử lý: hướng dẫn đặt vé.
  */
 const handleBookingGuide = () =>
-  `🎟 Cách đặt vé:\n` +
-  `  1. Vào Trang Chủ → chọn phim\n` +
-  `  2. Chọn suất chiếu và rạp\n` +
-  `  3. Chọn ghế ngồi\n` +
-  `  4. Thanh toán (thẻ / ví điện tử / tiền mặt tại quầy)\n` +
-  `  5. Nhận vé qua email hoặc app 🎉`;
+  `🎟 Cách đặt vé tại BossTicket:\n` +
+  `  1. Vào Trang Chủ → Chọn phim bạn muốn xem\n` +
+  `  2. Bấm "Đặt vé" → Chọn suất chiếu và rạp\n` +
+  `  3. Chọn ghế ngồi ưng ý\n` +
+  `  4. Thanh toán an toàn qua cổng VNPAY\n` +
+  `  5. Nhận mã vé QR qua Email hoặc xem tại Lịch Sử Đặt Vé 🎉`;
 
 /**
  * Xử lý: thông tin rạp chiếu.
  */
 const handleCinemaInfo = async () => {
   const cinemas = await Cinema.findAll({ attributes: ['cinema_name'], limit: 10 });
-  if (!cinemas.length) return 'Chưa có thông tin rạp chiếu.';
+  if (!cinemas.length) return 'Hệ thống chưa cập nhật thông tin rạp chiếu.';
   const list = cinemas.map((c, i) => `  ${i + 1}. ${c.cinema_name}`).join('\n');
-  return `🏛 Danh sách rạp chiếu:\n${list}`;
+  return `🏛 Danh sách cụm rạp BossTicket:\n${list}`;
 };
 
 /**
  * Xử lý: xin chào / lời mở đầu.
  */
 const handleGreeting = () =>
-  `👋 Xin chào! Tôi là trợ lý đặt vé của bạn.\n` +
+  `👋 Xin chào! Tôi là trợ lý AI ảo của rạp BossTicket.\n` +
   `Tôi có thể giúp bạn:\n` +
   `  • Xem phim đang chiếu\n` +
-  `  • Tra suất chiếu theo tên phim\n` +
+  `  • Tra lịch chiếu theo tên phim\n` +
   `  • Hướng dẫn đặt vé\n` +
-  `  • Xem danh sách rạp\n` +
   `  • Tìm mã giảm giá / khuyến mãi\n\n` +
-  `Bạn cần hỗ trợ gì không? 😊`;
+  `Bạn cần mình hỗ trợ gì ạ? 😊`;
 
 // ─────────────────────────────────────────────
 // INTENT DETECTION
 // ─────────────────────────────────────────────
 
-/**
- * Kiểm tra keyword match với word-boundary cho từ ngắn (< 4 ký tự).
- * Tránh "hi" match nhầm vào "chieu", "alo" match nhầm vào các từ khác.
- */
-const keywordMatch = (normalizedMsg, keywords) =>
-  keywords.some((kw) =>
-    kw.length < 4
-      ? new RegExp(`\\b${kw}\\b`).test(normalizedMsg)
-      : normalizedMsg.includes(kw)
-  );
-
 const INTENTS = [
-  // ⚠️ Specific intents TRƯỚC — greeting CUỐI CÙNG
   {
     name: 'showtime',
-    keywords: ['suat chieu', 'gio chieu', 'lich chieu', 'chieu luc may gio', 'chieu khi nao', 'tim suat', 'tim phim'],
+    keywords: ['suat chieu', 'gio chieu', 'lich chieu', 'chieu luc may gio', 'chieu khi nao', 'tim suat', 'tim phim', 'xem phim'],
     handler: (msg, userId) => handleShowtimeQuery(msg, userId),
   },
   {
     name: 'now_playing',
-    keywords: ['phim hom nay', 'phim dang chieu', 'phim gi dang chieu', 'co phim gi'],
+    keywords: ['phim hom nay', 'phim dang chieu', 'phim gi dang chieu', 'co phim gi', 'phim gi hot'],
     handler: () => handleNowPlaying(),
   },
   {
@@ -330,18 +297,15 @@ const INTENTS = [
   },
   {
     name: 'cinema',
-    keywords: ['rap chieu', 'danh sach rap', 'rap o dau', 'tim rap'],
+    keywords: ['rap chieu', 'danh sach rap', 'rap o dau', 'tim rap', 'cac rap', 'he thong rap'],
     handler: () => handleCinemaInfo(),
   },
   {
-    // Greeting xep CUOI -- chi match khi khong co intent nao o tren khop
     name: 'greeting',
     keywords: ['xin chao', 'chao ban', 'hello', 'hi', 'hey', 'alo'],
     handler: () => handleGreeting(),
   },
 ];
-
-// INTENTS được dùng trực tiếp trong processChat bên dưới
 
 // ─────────────────────────────────────────────
 // MAIN EXPORT
@@ -354,75 +318,57 @@ exports.processChat = async (message, history, userId) => {
     const trimmed = message.trim();
     const normalizedMsg = normalize(trimmed);
 
-    DBG('─────────────────────────────────────');
-    DBG('INPUT raw     :', JSON.stringify(message));
-    DBG('INPUT trimmed :', JSON.stringify(trimmed));
-    DBG('INPUT normalized:', JSON.stringify(normalizedMsg));
-    DBG('userId        :', userId);
-
-    // 1. Nếu user nhập số → kiểm tra context chọn phim
+    // 1. Kiểm tra Context chọn phim (nếu nhập số)
     if (/^\d+$/.test(normalizedMsg)) {
-      DBG('STEP 1: detected number input →', normalizedMsg);
       const selectionReply = await handleNumberSelection(normalizedMsg, userId);
-      DBG('STEP 1: handleNumberSelection result →', selectionReply ? 'HIT' : 'MISS (no cache context)');
       if (selectionReply) return selectionReply;
     }
 
-    // 2. Kiểm tra cache
+    // 2. Kiểm tra Cache
     const cacheKey = `chat_${userId}_${normalizedMsg}`;
-    DBG('STEP 2: checking cache key →', cacheKey);
     const cached = await cacheService.get(cacheKey);
-    if (cached) {
-      DBG('STEP 2: CACHE HIT → returning cached response');
-      return cached;
-    }
-    DBG('STEP 2: cache miss → continuing');
+    if (cached) return cached;
 
-    // 3. Intent detection — log từng intent được kiểm tra
-    DBG('STEP 3: scanning intents...');
+    // 3. Quét Intent
     let matchedIntent = null;
     for (const intent of INTENTS) {
       const hitKeyword = intent.keywords.find((kw) =>
         kw.length < 4 ? new RegExp(`\\b${kw}\\b`).test(normalizedMsg) : normalizedMsg.includes(kw)
       );
       if (hitKeyword) {
-        DBG(`STEP 3: ✅ MATCHED intent="${intent.name}" via keyword="${hitKeyword}"`);
         matchedIntent = intent;
         break;
-      } else {
-        DBG(`STEP 3: ❌ no match for intent="${intent.name}" (keywords: ${intent.keywords.join(', ')})`);
       }
     }
 
     let response;
 
+    // 4. Gọi Handler hoặc kích hoạt AI Fallback
     if (matchedIntent) {
-      DBG('STEP 4: calling handler for intent →', matchedIntent.name);
       response = await matchedIntent.handler(trimmed, userId);
-      DBG('STEP 4: handler response (first 120 chars) →', String(response).slice(0, 120));
     } else {
-      DBG('STEP 4: no intent matched → falling back to AI');
-      const movies = await Movie.findAll({ limit: 10, attributes: ['title'] });
+      DBG('No intent matched → falling back to AI');
+      // ĐÃ TỐI ƯU: Chỉ lấy phim ĐANG CHIẾU để làm Context cho AI (tối đa 10 phim)
+      const movies = await Movie.findAll({ 
+        where: { releaseDate: { [Op.lte]: new Date() } },
+        limit: 10, 
+        attributes: ['title'],
+        order: [['releaseDate', 'DESC']]
+      });
       const context = movies.map((m) => m.title).join(', ');
-      DBG('STEP 4: AI context movies →', context);
+      
       response = await aiService.generateFallbackResponse(trimmed, history, context);
-      DBG('STEP 4: AI response (first 120 chars) →', String(response).slice(0, 120));
     }
 
-    // 5. Cache có chọn lọc
+    // 5. Cache kết quả có chọn lọc (5 phút)
     const CACHEABLE_INTENTS = ['now_playing', 'showtime', 'cinema', 'booking', 'voucher', 'upcoming'];
     if (matchedIntent && CACHEABLE_INTENTS.includes(matchedIntent.name)) {
-      DBG('STEP 5: caching response for intent →', matchedIntent.name);
       await cacheService.set(cacheKey, response, 300);
-    } else {
-      DBG('STEP 5: skipping cache (intent not cacheable or fallback AI)');
     }
 
-    DBG('FINAL RESPONSE (first 120 chars) →', String(response).slice(0, 120));
-    DBG('─────────────────────────────────────');
     return response;
   } catch (err) {
     console.error('[ChatbotService] Error:', err);
-    return '⚠️ Hệ thống đang gặp sự cố, vui lòng thử lại sau.';
+    return '⚠️ Hệ thống đang bảo trì hoặc gặp sự cố, vui lòng thử lại sau giây lát ạ.';
   }
 };

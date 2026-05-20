@@ -314,9 +314,9 @@ exports.createBooking = async (userId, bookingData) => {
     // Tính điểm nhận được: 1.000 VNĐ thực trả = 1 điểm
     let pointsEarnedValue = 0;
     if (pointsUsedValue === 0) {
-      pointsEarnedValue = Math.floor(finalTotalPrice / 1000);
+      pointsEarnedValue = Math.floor(finalTotalPrice / moneyToPointRate);
     }
-
+    
     // 5. Create booking with expiration
     const newBooking = await Booking.create({
       user_id: userId,
